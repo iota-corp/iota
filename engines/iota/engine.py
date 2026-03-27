@@ -35,13 +35,19 @@ class Rule:
         except Exception:
             return self.rule_id
 
-    def get_severity(self) -> str:
-        if hasattr(self.module, "severity"):
+    def get_severity(self, event: Dict[str, Any]) -> str:
+        if not hasattr(self.module, "severity"):
+            return "INFO"
+        sev = self.module.severity
+        try:
+            return str(sev(event))
+        except TypeError:
             try:
-                return str(self.module.severity())
+                return str(sev())
             except Exception:
-                pass
-        return "INFO"
+                return "INFO"
+        except Exception:
+            return "INFO"
 
     def get_dedup(self, event: Dict[str, Any]) -> str:
         if not hasattr(self.module, "dedup"):
@@ -78,7 +84,7 @@ class Engine:
                         {
                             "rule_id": rule.rule_id,
                             "title": rule.get_title(rule_event),
-                            "severity": rule.get_severity(),
+                            "severity": rule.get_severity(rule_event),
                             "dedup": rule.get_dedup(rule_event),
                             "event": event,
                         }

@@ -78,8 +78,18 @@ The system SHALL output alerts as structured JSON to stdout.
   - `dedup`: Deduplication key
   - `event`: Full event payload
 
+### Requirement: Rule severity signature
+
+The Python engine SHALL resolve severity by invoking `severity(event)` when the rule defines a one-parameter severity function, and SHALL fall back to `severity()` when the rule defines a zero-parameter severity function.
+
+#### Scenario: Event-aware severity
+
+- **GIVEN** a rule that defines `severity(event)` returning a level based on the event
+- **WHEN** a match is produced
+- **THEN** the alert SHALL use the string returned by `severity(event)`
+
 ## Current Implementation
 
 - **Location**: `internal/engine/engine.go`, `engines/iota/engine.py`
-- **Rule Count**: 73 rules across 5 log types
+- **Rule Count**: 94 Python rules under `rules/` (excluding `rules/helpers/`), across CloudTrail, IAM, S3 access, VPC Flow, ALB, Okta, GSuite, 1Password
 - **Execution**: Python subprocess via `exec.Command`

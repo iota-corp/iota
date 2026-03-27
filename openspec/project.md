@@ -82,12 +82,13 @@ def severity(event):
 
 ### Detection Coverage
 
-73 production rules covering:
-- 39 CloudTrail rules (IAM, EC2, S3, KMS, Lambda, etc.)
-- 5 Okta rules (MFA, admin roles, API keys)
-- 4 Google Workspace rules (admin, 2SV, suspensions)
-- 3 1Password rules (brute force, unusual clients)
-- 22 IAM-specific rules (credential exposure, privilege escalation)
+94 production rules (Python under `rules/`, excluding `helpers`) covering:
+- CloudTrail and related AWS (IAM, EC2, S3, Lambda, etc.)
+- Okta system log
+- Google Workspace
+- 1Password sign-in
+
+Additional upstream rules from `panther-analysis` are ported selectively; query-backed baselines, correlation, and log types iota does not ingest (e.g. Kubernetes, EDR, Azure) are tracked in OpenSpec changes under `openspec/changes/`.
 
 ### Performance Characteristics
 

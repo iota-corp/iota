@@ -142,6 +142,8 @@ jobs:
       - name: Attach binaries to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # This job has no checkout; gh otherwise infers repo from git and fails.
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           TAG="${{ github.ref_name }}"

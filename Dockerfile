@@ -1,8 +1,10 @@
-FROM golang:1.24-alpine AS builder
+# go-duckdb ships a glibc-linked libduckdb.a; musl (Alpine) cannot link it. Use Debian (glibc).
+FROM golang:1.24-bookworm AS builder
 
-# g++ provides libstdc++ for linking go-duckdb (CGO).
-# hadolint ignore=DL3018
-RUN apk add --no-cache gcc g++ musl-dev sqlite-dev python3
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ libc6-dev libsqlite3-dev python3 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -13,10 +15,12 @@ COPY . .
 
 RUN CGO_ENABLED=1 go build -o iota ./cmd/iota
 
-FROM alpine:3.19
+FROM debian:bookworm-slim
 
-# hadolint ignore=DL3018
-RUN apk add --no-cache python3 sqlite-libs ca-certificates libstdc++
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 ca-certificates libsqlite3-0 libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

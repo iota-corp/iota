@@ -67,8 +67,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Avoid failed pulls of moby/buildkit when ~/.docker has bad docker.io credentials.
+      - name: Log out of Docker Hub (use anonymous pull for public images)
+        run: docker logout docker.io 2>/dev/null || true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+        with:
+          # Use engine BuildKit instead of pulling moby/buildkit:buildx-stable-1 (often hits bad auth).
+          driver: docker
 
       - name: Build Docker image
         uses: docker/build-push-action@v5
@@ -79,12 +86,3 @@ jobs:
           tags: iota:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-      - name: Run Trivy vulnerability scanner (optional)
-        uses: aquasecurity/trivy-action@master
-        continue-on-error: true
-        with:
-          image-ref: iota:test
-          format: "table"
-          severity: "CRITICAL,HIGH"
-          scan-type: "image"

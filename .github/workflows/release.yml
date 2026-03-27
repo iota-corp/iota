@@ -1,24 +1,64 @@
-# Tag push v*.*.* → Linux binaries on GitHub Release + Docker Hub (multi-arch).
-# Tags are created by merging a Release Please release PR (usual) or by manual `git tag`.
+# -----------------------------------------------------------------------------
+# Release pipeline (one workflow, two phases)
+#
+# Phase A — Version PR (push to main only)
+#   Release Please opens/updates the release PR (changelog + version files).
+#
+# Phase B — Publish (tag v*.*.* or manual dispatch)
+#   Linux CGO binaries → GitHub Release assets
+#   Docker multi-arch → Docker Hub (bilals12/iota)
+#
+# Phase B must run after a version tag exists. Release Please creates that tag when
+# you merge the release PR. Use secret RELEASE_PLEASE_TOKEN (PAT), not GITHUB_TOKEN,
+# so the tag push triggers this workflow (GitHub blocks chained GITHUB_TOKEN events).
+#
+# Manual recovery: Actions → Release pipeline → Run workflow → tag e.g. v0.2.0
+# -----------------------------------------------------------------------------
 
-name: Release
+name: Release pipeline
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and publish (e.g. v0.2.0)"
+        required: true
+        type: string
 
 permissions:
   contents: write
+  issues: write
+  pull-requests: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-pipeline-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # --- Phase A: conventional commits → release PR (no binaries/Docker here) ---
+  release-please:
+    name: Open or update release PR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # --- Phase B: tag → binaries + Docker Hub + attach binaries to GitHub Release ---
   build-binary:
     name: Build binary (${{ matrix.suffix }})
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +70,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - uses: actions/setup-go@v5
         with:
@@ -50,10 +92,15 @@ jobs:
 
   build-amd64:
     name: Docker image linux/amd64
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Build and push AMD64 image
         id: build-amd64
@@ -75,10 +122,15 @@ jobs:
 
   build-arm64:
     name: Docker image linux/arm64
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Build and push ARM64 image
         id: build-arm64
@@ -101,11 +153,16 @@ jobs:
 
   create-manifest:
     name: Docker multi-arch manifest
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     needs: [build-amd64, build-arm64]
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Create multi-arch manifest
         id: manifest
@@ -123,10 +180,13 @@ jobs:
             bilals12/iota@${{ needs.build-amd64.outputs.digest }}
             bilals12/iota@${{ needs.build-arm64.outputs.digest }}
 
-  github-release:
-    name: GitHub Release assets
+  attach-binaries:
+    name: Attach binaries to GitHub Release
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     needs: [build-binary]
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
       - name: Download binaries
@@ -139,12 +199,12 @@ jobs:
       - name: Make binaries executable
         run: chmod +x release-assets/iota-*
 
-      - name: Attach binaries to GitHub Release
+      - name: Upload to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          TAG="${{ github.ref_name }}"
+          TAG="${RELEASE_TAG}"
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" \
               release-assets/iota-linux-amd64 \

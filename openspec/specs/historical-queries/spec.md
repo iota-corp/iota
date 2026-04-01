@@ -34,6 +34,19 @@ The system SHALL support executing SQL queries against the data lake via AWS Ath
 - **WHEN** Athena reports failure
 - **THEN** the system SHALL return the failure reason
 
+### Requirement: Data lake S3 layout (query pruning)
+
+Lake objects SHALL use a consistent key prefix so time-bounded queries scan only relevant prefixes.
+
+#### Scenario: Hourly partition path
+
+- **GIVEN** a flushed batch for log type `AWS.CloudTrail` and event hour `2024-03-15T14:00:00Z`
+- **WHEN** the object key is generated
+- **THEN** it SHALL begin with `logs/aws_cloudtrail/year=2024/month=03/day=15/hour=14/`
+- **AND** the filename SHALL end with `.json.gz`
+
+(Log type segments use the same slug as `getTableName`: dots → underscores, lowercased.)
+
 ### Requirement: Glue Catalog Integration
 
 The system SHALL register data lake tables and partitions in AWS Glue Catalog.

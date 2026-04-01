@@ -62,14 +62,22 @@ repos:
         types_or: [python, pyi]
 
   # Go-specific hooks
+  # Force a valid absolute GOPATH: some shells store GOPATH as the literal "$HOME/go",
+  # which breaks `go` when pre-commit runs without expansion. Module cache uses this path.
   - repo: https://github.com/turo/pre-commit-hooks
     rev: v4.0.0
     hooks:
       - id: go-mod-tidy
         fail_fast: true
+        env:
+          GOPATH: /tmp/iota-precommit-gopath
       - id: go-build
         fail_fast: true
+        env:
+          GOPATH: /tmp/iota-precommit-gopath
       - id: go-test-unit
+        env:
+          GOPATH: /tmp/iota-precommit-gopath
       - id: docker-compose-lint
 
   # Dockerfile lint (system binary — install: brew install hadolint)
@@ -84,6 +92,8 @@ repos:
     hooks:
       - id: golangci-lint
         fail_fast: true
+        env:
+          GOPATH: /tmp/iota-precommit-gopath
 
   # Terraform/HCL-specific hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform

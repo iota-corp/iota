@@ -1,4 +1,4 @@
-.PHONY: build test clean docker-build docker-push helm-package terraform-init
+.PHONY: build test smoke ci-local clean docker-build docker-push helm-package terraform-init
 
 # Build the detection engine
 build:
@@ -7,9 +7,14 @@ build:
 	@CGO_ENABLED=1 go build -o bin/iota ./cmd/iota
 	@echo "✓ Built bin/iota"
 
-# Run tests
+# Run tests (unit / package tests; set CGO_ENABLED=1 locally if sqlite/duckdb tests fail)
 test:
-	@go test -v ./...
+	@CGO_ENABLED=1 go test -v ./...
+
+# End-to-end smoke: build + once mode on testdata (same as CI)
+smoke:
+	@chmod +x scripts/smoke.sh 2>/dev/null || true
+	@./scripts/smoke.sh
 
 # Clean build artifacts
 clean:
@@ -87,16 +92,16 @@ terraform-init:
 	@cd terraform && terraform init
 	@echo "✓ Terraform initialized"
 
-# Run detection engine (once mode)
+# Run detection engine (once mode); build first: make build
 run-once:
-	@./bin/iota --mode=once --jsonl=testdata/events/test-01.jsonl --rules=rules/aws_cloudtrail --python=python3 --engine=engines/iota/engine.py
+	@./bin/iota --mode=once --jsonl=testdata/sample.jsonl --rules=rules/aws_cloudtrail --python=python3 --engine=engines/iota/engine.py
 
 # Run detection engine (watch mode)
 run-watch:
 	@./bin/iota --mode=watch --events-dir=./testdata/events --rules=rules/aws_cloudtrail --python=python3 --engine=engines/iota/engine.py
 
-# Run all checks before commit
-pre-commit: test build
+# Run all checks before commit (unit tests + smoke + release binary)
+pre-commit: test smoke build
 	@echo "✓ All pre-commit checks passed"
 
 # Lint code
@@ -118,6 +123,10 @@ test-coverage:
 docker-validate:
 	@hadolint Dockerfile || echo "Install hadolint: https://github.com/hadolint/hadolint"
 
-# Run all validation checks
+# Run all validation checks (fmt, lint, unit tests; no smoke)
 validate: fmt lint test
 	@echo "✓ All validation checks passed"
+
+# Everything CI exercises locally: validate + smoke
+ci-local: validate smoke
+	@echo "✓ ci-local passed"

@@ -41,11 +41,15 @@ repos:
         fail_fast: true
 
   # Shell script linting
-  - repo: https://github.com/jumanjihouse/pre-commit-hooks
-    rev: 3.0.0
+  # shellcheck-py installs a platform shellcheck binary via pip (no brew/apt required).
+  - repo: https://github.com/shellcheck-py/shellcheck-py
+    rev: v0.11.0.1
     hooks:
       - id: shellcheck
         fail_fast: true
+  - repo: https://github.com/jumanjihouse/pre-commit-hooks
+    rev: 3.0.0
+    hooks:
       - id: shfmt
 
   # Python-specific hooks

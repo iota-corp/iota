@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/bilals12/iota/compare/v0.3.0...v0.4.0) (2026-04-02)
+
+
+### Features
+
+* **query:** align DuckDB and Glue paths with data lake via lakepath ([d9497e6](https://github.com/bilals12/iota/commit/d9497e6ac83c280ec94b326b56bf8cfc930bf493))
+
 ## [Unreleased]
 
 ### Features

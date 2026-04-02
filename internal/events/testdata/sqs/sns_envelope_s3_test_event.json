@@ -1,0 +1,7 @@
+{
+  "Type": "Notification",
+  "MessageId": "test",
+  "TopicArn": "arn:aws:sns:us-east-1:111122223333:test",
+  "Message": "{\"Service\":\"Amazon S3\",\"Event\":\"s3:TestEvent\",\"Time\":\"2026-04-02T19:30:48.360Z\",\"Bucket\":\"iota-cloudtrail-test-us-east-1\",\"RequestId\":\"REQ\",\"HostId\":\"HID\"}",
+  "Timestamp": "2026-04-02T19:30:48.385Z"
+}

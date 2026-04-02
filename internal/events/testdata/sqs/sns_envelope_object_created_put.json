@@ -1,0 +1,12 @@
+{
+  "Type": "Notification",
+  "MessageId": "08a2bee8-276c-58fd-9755-dca0e197bbd7",
+  "TopicArn": "arn:aws:sns:us-east-1:111122223333:iota-cloudtrail-object-created",
+  "Subject": "Amazon S3 Notification",
+  "Message": "{\"Records\":[{\"eventVersion\":\"2.1\",\"eventSource\":\"aws:s3\",\"awsRegion\":\"us-east-1\",\"eventTime\":\"2026-04-02T19:34:18.137Z\",\"eventName\":\"ObjectCreated:Put\",\"s3\":{\"s3SchemaVersion\":\"1.0\",\"configurationId\":\"iota-cloudtrail-new-objects\",\"bucket\":{\"name\":\"iota-cloudtrail-test-us-east-1\",\"ownerIdentity\":{\"principalId\":\"A\"},\"arn\":\"arn:aws:s3:::iota-cloudtrail-test-us-east-1\"},\"object\":{\"key\":\"AWSLogs/111122223333/CloudTrail/us-east-1/2026/04/02/111122223333_CloudTrail_us-east-1_20260402T1935Z_smoke.json.gz\",\"size\":11103,\"eTag\":\"8457280e4d04ea249b04c991dc93f3d2\",\"sequencer\":\"0069CEC4BA19FE4410\"}}}]}",
+  "Timestamp": "2026-04-02T19:34:19.002Z",
+  "SignatureVersion": "1",
+  "Signature": "sig",
+  "SigningCertURL": "https://sns.us-east-1.amazonaws.com/SimpleNotificationService.pem",
+  "UnsubscribeURL": "https://sns.us-east-1.amazonaws.com/?Action=Unsubscribe"
+}

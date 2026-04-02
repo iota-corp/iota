@@ -78,59 +78,18 @@ func (p *SQSProcessor) Process(ctx context.Context) error {
 }
 
 func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message) error {
-	var snsMessage struct {
-		Type             string `json:"Type"`
-		Message          string `json:"Message"`
-		MessageId        string `json:"MessageId"`
-		Timestamp        string `json:"Timestamp"`
-		TopicArn         string `json:"TopicArn"`
-		SignatureVersion string `json:"SignatureVersion"`
-		Signature        string `json:"Signature"`
-		SigningCertURL   string `json:"SigningCertURL"`
-		UnsubscribeURL   string `json:"UnsubscribeURL"`
+	if message.Body == nil || *message.Body == "" {
+		return fmt.Errorf("empty message body")
 	}
 
-	if err := json.Unmarshal([]byte(*message.Body), &snsMessage); err != nil {
-		return fmt.Errorf("unmarshal sns message: %w", err)
+	objects, err := ParseS3Notification(*message.Body)
+	if err != nil {
+		return err
 	}
 
-	if snsMessage.Type != "Notification" {
-		return nil
-	}
-
-	var s3Notification struct {
-		Records []struct {
-			EventVersion string `json:"eventVersion"`
-			EventSource  string `json:"eventSource"`
-			AWSRegion    string `json:"awsRegion"`
-			EventTime    string `json:"eventTime"`
-			EventName    string `json:"eventName"`
-			S3           struct {
-				Bucket struct {
-					Name string `json:"name"`
-				} `json:"bucket"`
-				Object struct {
-					Key  string `json:"key"`
-					Size int64  `json:"size"`
-				} `json:"object"`
-			} `json:"s3"`
-		} `json:"Records"`
-	}
-
-	if err := json.Unmarshal([]byte(snsMessage.Message), &s3Notification); err != nil {
-		return fmt.Errorf("unmarshal s3 notification: %w", err)
-	}
-
-	for _, record := range s3Notification.Records {
-		if record.EventName != "ObjectCreated:Put" && record.EventName != "ObjectCreated:CompleteMultipartUpload" {
-			continue
-		}
-
-		bucket := record.S3.Bucket.Name
-		key := record.S3.Object.Key
-
-		if err := p.handler(ctx, bucket, key); err != nil {
-			return fmt.Errorf("handle s3 object %s/%s: %w", bucket, key, err)
+	for _, obj := range objects {
+		if err := p.handler(ctx, obj.Bucket, obj.Key); err != nil {
+			return fmt.Errorf("handle s3 object %s/%s: %w", obj.Bucket, obj.Key, err)
 		}
 	}
 

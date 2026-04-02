@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bilals12/iota/internal/lakepath"
 	_ "github.com/marcboeker/go-duckdb"
 )
 
@@ -138,21 +139,17 @@ func (c *DuckDBClient) buildS3Paths(logType string, tr TimeRange) []string {
 	end := tr.End.Add(time.Hour).Truncate(time.Hour)
 
 	for current.Before(end) {
-		path := fmt.Sprintf(
-			"s3://%s/%s/year=%d/month=%02d/day=%02d/hour=%02d/*.parquet",
-			c.s3Bucket, logType,
-			current.Year(), int(current.Month()), current.Day(), current.Hour(),
-		)
-		paths = append(paths, path)
+		paths = append(paths, lakepath.S3JSONGlob(c.s3Bucket, logType, current))
 		current = current.Add(time.Hour)
 	}
 
 	return paths
 }
 
+// buildTableSource wraps paths for DuckDB read_ndjson; globs must match the data lake writer (*.json.gz under logs/<slug>/…).
 func (c *DuckDBClient) buildTableSource(paths []string) string {
 	if len(paths) == 1 {
-		return fmt.Sprintf("read_parquet('%s', hive_partitioning=true)", paths[0])
+		return fmt.Sprintf("read_ndjson('%s', hive_partitioning=true)", paths[0])
 	}
 
 	quoted := make([]string, len(paths))
@@ -160,7 +157,7 @@ func (c *DuckDBClient) buildTableSource(paths []string) string {
 		quoted[i] = fmt.Sprintf("'%s'", p)
 	}
 
-	return fmt.Sprintf("read_parquet([%s], hive_partitioning=true)", strings.Join(quoted, ", "))
+	return fmt.Sprintf("read_ndjson([%s], hive_partitioning=true)", strings.Join(quoted, ", "))
 }
 
 func (c *DuckDBClient) Close() error {

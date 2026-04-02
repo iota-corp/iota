@@ -16,11 +16,11 @@ import (
 )
 
 type Writer struct {
-	s3Client  *s3.Client
-	bucket    string
-	buffer    *EventBuffer
-	maxSize   int
-	maxAge    time.Duration
+	s3Client    *s3.Client
+	bucket      string
+	buffer      *EventBuffer
+	maxSize     int
+	maxAge      time.Duration
 	glueCatalog interface {
 		EnsureDatabase(ctx context.Context) error
 		CreateTable(ctx context.Context, logType string) error

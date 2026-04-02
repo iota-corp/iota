@@ -1,8 +1,11 @@
 package query
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/bilals12/iota/internal/lakepath"
 )
 
 func TestBuildS3Paths(t *testing.T) {
@@ -49,6 +52,18 @@ func TestBuildS3Paths(t *testing.T) {
 					t.Logf("  path[%d]: %s", i, p)
 				}
 			}
+			if len(paths) > 0 {
+				want := lakepath.S3JSONGlob("test-bucket", tt.logType, tt.start.Truncate(time.Hour))
+				if paths[0] != want {
+					t.Errorf("first path mismatch:\n got %q\nwant %q", paths[0], want)
+				}
+				if !strings.Contains(paths[0], "logs/aws_cloudtrail/") {
+					t.Errorf("path should use lake layout logs/aws_cloudtrail/: %q", paths[0])
+				}
+				if !strings.HasSuffix(paths[0], "*.json.gz") {
+					t.Errorf("path should glob json.gz objects: %q", paths[0])
+				}
+			}
 		})
 	}
 }
@@ -63,13 +78,13 @@ func TestBuildTableSource(t *testing.T) {
 	}{
 		{
 			name:     "single path",
-			paths:    []string{"s3://bucket/cloudtrail/year=2024/month=01/day=15/hour=10/*.parquet"},
-			expected: "read_parquet('s3://bucket/cloudtrail/year=2024/month=01/day=15/hour=10/*.parquet', hive_partitioning=true)",
+			paths:    []string{"s3://bucket/logs/aws_cloudtrail/year=2024/month=01/day=15/hour=10/*.json.gz"},
+			expected: "read_ndjson('s3://bucket/logs/aws_cloudtrail/year=2024/month=01/day=15/hour=10/*.json.gz', hive_partitioning=true)",
 		},
 		{
 			name:     "multiple paths",
-			paths:    []string{"s3://bucket/a/*.parquet", "s3://bucket/b/*.parquet"},
-			expected: "read_parquet(['s3://bucket/a/*.parquet', 's3://bucket/b/*.parquet'], hive_partitioning=true)",
+			paths:    []string{"s3://bucket/logs/a/year=2024/month=01/day=01/hour=00/*.json.gz", "s3://bucket/logs/b/year=2024/month=01/day=01/hour=01/*.json.gz"},
+			expected: "read_ndjson(['s3://bucket/logs/a/year=2024/month=01/day=01/hour=00/*.json.gz', 's3://bucket/logs/b/year=2024/month=01/day=01/hour=01/*.json.gz'], hive_partitioning=true)",
 		},
 	}
 

@@ -1,11 +1,24 @@
 # Changelog
 
-## [0.3.0](https://github.com/bilals12/iota/compare/v0.2.0...v0.3.0) (2026-03-27)
-
+## [Unreleased]
 
 ### Features
 
-* unify release workflow and document Release Please token ([76d7a3e](https://github.com/bilals12/iota/commit/76d7a3e987c2495f6a69855c765255332bacb440))
+- **Data lake / queries:** Introduce `internal/lakepath` so the data lake writer, Glue catalog, and DuckDB `iota query` paths share one layout: `logs/<table_slug>/year=…/month=…/day=…/hour=…/*.json.gz`. DuckDB uses `read_ndjson` with those globs (replacing Parquet placeholders that did not match stored objects). CLI shorthand `cloudtrail` canonicalizes to `AWS.CloudTrail` for slug and path generation.
+
+### Added
+
+- CI and local **smoke test** (`scripts/smoke.sh`, `make smoke`): build with CGO, run `once` mode on sample JSONL with the Python rules engine.
+
+### Fixed
+
+- **pre-commit:** pin an absolute `GOPATH` for `go-build` / `go-mod-tidy` / `golangci-lint` when the shell leaves `$HOME/go` unexpanded.
+
+## [0.3.0](https://github.com/bilals12/iota/compare/v0.2.0...v0.3.0) (2026-03-27)
+
+### Features
+
+- unify release workflow and document Release Please token ([76d7a3e](https://github.com/bilals12/iota/commit/76d7a3e987c2495f6a69855c765255332bacb440))
 
 ## [0.2.0](https://github.com/bilals12/iota/compare/v0.1.0...v0.2.0) (2026-03-27)
 

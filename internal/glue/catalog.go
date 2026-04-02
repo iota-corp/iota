@@ -3,11 +3,11 @@ package glue
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	"github.com/aws/aws-sdk-go-v2/service/glue/types"
+	"github.com/bilals12/iota/internal/lakepath"
 )
 
 type Catalog struct {
@@ -42,7 +42,7 @@ func (c *Catalog) EnsureDatabase(ctx context.Context) error {
 }
 
 func (c *Catalog) CreateTable(ctx context.Context, logType string) error {
-	tableName := getTableName(logType)
+	tableName := lakepath.TableSlug(logType)
 	location := fmt.Sprintf("s3://%s/logs/%s/", c.bucket, tableName)
 
 	input := &glue.CreateTableInput{
@@ -52,13 +52,13 @@ func (c *Catalog) CreateTable(ctx context.Context, logType string) error {
 			Description: aws.String(fmt.Sprintf("iota table for %s logs", logType)),
 			TableType:   aws.String("EXTERNAL_TABLE"),
 			StorageDescriptor: &types.StorageDescriptor{
-				Location:      aws.String(location),
-				InputFormat:   aws.String("org.apache.hadoop.mapred.TextInputFormat"),
-				OutputFormat:  aws.String("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
+				Location:     aws.String(location),
+				InputFormat:  aws.String("org.apache.hadoop.mapred.TextInputFormat"),
+				OutputFormat: aws.String("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
 				SerdeInfo: &types.SerDeInfo{
 					SerializationLibrary: aws.String("org.openx.data.jsonserde.JsonSerDe"),
 				},
-				Columns: getColumnsForLogType(logType),
+				Columns: getColumnsForLogType(lakepath.CanonicalLogType(logType)),
 			},
 			PartitionKeys: getPartitionKeys(),
 			Parameters: map[string]string{
@@ -78,15 +78,14 @@ func (c *Catalog) CreateTable(ctx context.Context, logType string) error {
 	return nil
 }
 
-
 func (c *Catalog) AddPartition(ctx context.Context, logType string, year, month, day, hour int) error {
-	tableName := getTableName(logType)
+	tableName := lakepath.TableSlug(logType)
 	location := fmt.Sprintf("s3://%s/logs/%s/year=%d/month=%02d/day=%02d/hour=%02d/",
 		c.bucket, tableName, year, month, day, hour)
 
 	input := &glue.CreatePartitionInput{
 		DatabaseName: aws.String(c.database),
-		TableName:   aws.String(tableName),
+		TableName:    aws.String(tableName),
 		PartitionInput: &types.PartitionInput{
 			Values: []string{
 				fmt.Sprintf("%d", year),
@@ -95,9 +94,9 @@ func (c *Catalog) AddPartition(ctx context.Context, logType string, year, month,
 				fmt.Sprintf("%02d", hour),
 			},
 			StorageDescriptor: &types.StorageDescriptor{
-				Location:      aws.String(location),
-				InputFormat:   aws.String("org.apache.hadoop.mapred.TextInputFormat"),
-				OutputFormat:  aws.String("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
+				Location:     aws.String(location),
+				InputFormat:  aws.String("org.apache.hadoop.mapred.TextInputFormat"),
+				OutputFormat: aws.String("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"),
 				SerdeInfo: &types.SerDeInfo{
 					SerializationLibrary: aws.String("org.openx.data.jsonserde.JsonSerDe"),
 				},
@@ -113,10 +112,6 @@ func (c *Catalog) AddPartition(ctx context.Context, logType string, year, month,
 	}
 
 	return nil
-}
-
-func getTableName(logType string) string {
-	return strings.ToLower(strings.ReplaceAll(logType, ".", "_"))
 }
 
 func getColumnsForLogType(logType string) []types.Column {

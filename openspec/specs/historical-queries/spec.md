@@ -82,6 +82,8 @@ The system SHALL register data lake tables and partitions in AWS Glue Catalog.
 
 4. **Cost**: Charged per TB scanned. Large historical queries can be expensive.
 
+5. **DuckDB + JSON.GZ**: `read_ndjson` expects gzip-wrapped newline-delimited JSON. If on-disk objects use a different encoding (e.g. concatenated gzip members per record), queries may need a format adjustment or a compaction step to standard NDJSON.GZ or Parquet.
+
 ## Related Changes
 
 - `add-fast-historical-queries`: Proposal to add DuckDB for sub-second queries on recent data

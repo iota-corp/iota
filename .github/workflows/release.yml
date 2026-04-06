@@ -45,7 +45,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.actor != 'github-actions[bot]' &&
       !contains(github.event.head_commit.message, '[skip release]')
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, beelink]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +77,7 @@ jobs:
           git push origin "${TAG}"
 
   # --- Binaries (parallel with Docker) ---
+  # Stay on GitHub-hosted: native linux/arm64 job needs a real ARM runner for CGO (Beelink is amd64-only).
   build-binary:
     name: Build binary (${{ matrix.suffix }})
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
@@ -119,7 +120,7 @@ jobs:
   docker-publish:
     name: Docker multi-arch push
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, beelink]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
       CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
@@ -160,7 +161,7 @@ jobs:
     name: Bump image tag in iota-deployments
     needs: [docker-publish]
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, beelink]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
@@ -204,12 +205,15 @@ jobs:
   attach-binaries:
     name: Attach binaries to GitHub Release
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, beelink]
     needs: [build-binary]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
 
     steps:
+      - name: Ensure GitHub CLI
+        run: command -v gh >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y gh)
+
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
@@ -245,10 +249,13 @@ jobs:
     name: Sync version manifest on main
     needs: [docker-publish]
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, beelink]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
+      - name: Ensure jq
+        run: command -v jq >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y jq)
+
       - name: Skip if no PAT
         id: tok
         env:

@@ -104,9 +104,7 @@ jobs:
           go-version: "1.24.x"
 
       - name: Install build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gcc g++ libc6-dev libsqlite3-dev
+        run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 
       - name: Build
         run: CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o "iota-${{ matrix.suffix }}" ./cmd/iota
@@ -212,7 +210,14 @@ jobs:
 
     steps:
       - name: Ensure GitHub CLI
-        run: command -v gh >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y gh)
+        run: |
+          command -v gh >/dev/null 2>&1 && exit 0
+          if sudo -n true 2>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y gh
+          else
+            echo "::error::Install gh on the self-hosted runner: sudo apt-get install -y gh"
+            exit 1
+          fi
 
       - name: Download binaries
         uses: actions/download-artifact@v4
@@ -254,7 +259,14 @@ jobs:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
       - name: Ensure jq
-        run: command -v jq >/dev/null 2>&1 || (sudo apt-get update && sudo apt-get install -y jq)
+        run: |
+          command -v jq >/dev/null 2>&1 && exit 0
+          if sudo -n true 2>/dev/null; then
+            sudo apt-get update && sudo apt-get install -y jq
+          else
+            echo "::error::Install jq on the self-hosted runner: sudo apt-get install -y jq"
+            exit 1
+          fi
 
       - name: Skip if no PAT
         id: tok

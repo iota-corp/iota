@@ -140,7 +140,7 @@ jobs:
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: bilals12/iota
+          images: iota-corp/iota
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -170,7 +170,7 @@ jobs:
         run: |
           if [ -z "${PAT:-}" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Set repository secret IOTA_DEPLOYMENTS_TOKEN in bilals12/iota to auto-bump bilals12/iota-deployments on each release tag."
+            echo "::notice::Set repository secret IOTA_DEPLOYMENTS_TOKEN in iota-corp/iota to auto-bump iota-corp/iota-deployments on each release tag."
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi
@@ -178,7 +178,7 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.bump.outputs.run == 'true'
         with:
-          repository: bilals12/iota-deployments
+          repository: iota-corp/iota-deployments
           token: ${{ secrets.IOTA_DEPLOYMENTS_TOKEN }}
           ref: main
 

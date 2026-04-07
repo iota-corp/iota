@@ -1,9 +1,14 @@
 package main
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -26,6 +31,44 @@ import (
 	"github.com/bilals12/iota/pkg/cloudtrail"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+// openS3ObjectBody returns a reader for log parsing. Uses gzip when the key ends with .gz
+// or S3 Content-Encoding is gzip (standard CloudTrail delivery).
+func openS3ObjectBody(body io.ReadCloser, key string, contentEncoding *string) (io.Reader, func(), error) {
+	if body == nil {
+		return nil, nil, fmt.Errorf("nil body")
+	}
+	ce := ""
+	if contentEncoding != nil {
+		ce = strings.ToLower(strings.TrimSpace(*contentEncoding))
+	}
+	keyLower := strings.ToLower(key)
+	if strings.HasSuffix(keyLower, ".gz") || ce == "gzip" {
+		gz, err := gzip.NewReader(body)
+		if err != nil {
+			body.Close()
+			return nil, nil, fmt.Errorf("gzip reader: %w", err)
+		}
+		return gz, func() { gz.Close() }, nil
+	}
+	return body, func() { body.Close() }, nil
+}
+
+func sqsReceiveConfigFromEnv() (maxMessages, waitTime int32) {
+	maxMessages = 10
+	waitTime = 20
+	if s := strings.TrimSpace(os.Getenv("IOTA_SQS_MAX_MESSAGES")); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 1 && n <= 10 {
+			maxMessages = int32(n)
+		}
+	}
+	if s := strings.TrimSpace(os.Getenv("IOTA_SQS_WAIT_SECONDS")); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n >= 0 && n <= 20 {
+			waitTime = int32(n)
+		}
+	}
+	return maxMessages, waitTime
+}
 
 func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
 	log.Printf("starting SQS processor: queue=%s", queueURL)
@@ -138,7 +181,6 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			op.End(err)
 			return fmt.Errorf("get object: %w", err)
 		}
-		defer result.Body.Close()
 
 		var downloadedBytes int64
 		if result.ContentLength != nil {
@@ -146,9 +188,17 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		}
 		metrics.RecordS3ObjectDownloaded("success", downloadedBytes)
 
+		procReader, closeBody, err := openS3ObjectBody(result.Body, key, result.ContentEncoding)
+		if err != nil {
+			metrics.RecordProcessingError("s3", "open_body")
+			op.End(err)
+			return fmt.Errorf("open object body: %w", err)
+		}
+		defer closeBody()
+
 		procStart := time.Now()
 		processCtx, processSpan := telemetry.StartSpan(ctx, "logprocessor.Process")
-		processedEvents, errs := processor.Process(processCtx, result.Body)
+		processedEvents, errs := processor.Process(processCtx, procReader)
 
 		var batch []*cloudtrail.Event
 		var procEvents []*logprocessor.ProcessedEvent
@@ -194,6 +244,8 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			return fmt.Errorf("analyze: %w", err)
 		}
 
+		logDetectionMatches(matches)
+
 		pipelineDur := time.Since(procStart)
 		perEvent := pipelineDur
 		if len(procEvents) > 0 {
@@ -222,12 +274,14 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		return nil
 	}
 
+	maxMsgs, waitSec := sqsReceiveConfigFromEnv()
 	sqsProcessor := events.NewSQSProcessor(sqsClient, events.Config{
 		QueueURL:    queueURL,
 		Handler:     handler,
-		MaxMessages: 10,
-		WaitTime:    20,
+		MaxMessages: maxMsgs,
+		WaitTime:    waitSec,
 	})
+	log.Printf("SQS processor: maxMessages=%d waitTimeSeconds=%d", maxMsgs, waitSec)
 
 	log.Println("SQS processor started, press ctrl+c to stop")
 	return sqsProcessor.Process(ctx)

@@ -139,6 +139,8 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 			return fmt.Errorf("analyze: %w", err)
 		}
 
+		logDetectionMatches(matches)
+
 		op.SetAttributes(attribute.Int("matches.count", len(matches)))
 
 		for _, match := range matches {
@@ -152,12 +154,14 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 		return nil
 	}
 
+	maxMsgs, waitSec := sqsReceiveConfigFromEnv()
 	ebProcessor := events.NewEventBridgeProcessor(sqsClient, events.EventBridgeConfig{
 		QueueURL:    queueURL,
 		Handler:     handler,
-		MaxMessages: 10,
-		WaitTime:    20,
+		MaxMessages: maxMsgs,
+		WaitTime:    waitSec,
 	})
+	log.Printf("EventBridge processor: maxMessages=%d waitTimeSeconds=%d", maxMsgs, waitSec)
 
 	log.Println("EventBridge processor started, press ctrl+c to stop")
 	return ebProcessor.Process(ctx)

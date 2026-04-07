@@ -7,6 +7,7 @@ import (
 
 	"github.com/bilals12/iota/internal/deduplication"
 	"github.com/bilals12/iota/internal/engine"
+	"github.com/bilals12/iota/internal/metrics"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 )
 
@@ -69,6 +70,8 @@ func (f *Forwarder) ProcessMatch(ctx context.Context, match engine.Match, dedupP
 		AlertCreationTime: alertInfo.AlertCreationTime.Format("2006-01-02T15:04:05Z"),
 		AlertUpdateTime:   alertInfo.AlertUpdateTime.Format("2006-01-02T15:04:05Z"),
 	}
+
+	metrics.RecordAlertGenerated(alert.Severity, alert.RuleID)
 
 	for _, output := range f.outputs {
 		if err := output.SendAlert(ctx, alert); err != nil {

@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/bilals12/iota/internal/alertforwarder"
@@ -48,8 +50,8 @@ func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		metrics.RecordAlertForwarded("slack", "failure")
-		return fmt.Errorf("slack returned status %d", resp.StatusCode)
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("slack returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
 	metrics.RecordAlertForwarded("slack", "success")
@@ -59,81 +61,58 @@ func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert
 func (s *SlackOutput) formatMessage(alert *alertforwarder.Alert) slackMessage {
 	color := getSeverityColor(alert.Severity)
 
-	fields := []slackAttachField{
-		{
-			Title: "rule id",
-			Value: alert.RuleID,
-			Short: true,
-		},
-		{
-			Title: "severity",
-			Value: alert.Severity,
-			Short: true,
-		},
-		{
-			Title: "alert id",
-			Value: alert.AlertID,
-			Short: true,
-		},
-		{
-			Title: "dedup key",
-			Value: alert.DedupKey,
-			Short: true,
-		},
+	meta := fmt.Sprintf("*rule id:* %s\n*severity:* %s\n*alert id:* %s\n*dedup key:* %s\n*created:* %s\n*updated:* %s",
+		slackMrkdwnLite(alert.RuleID),
+		slackMrkdwnLite(alert.Severity),
+		slackMrkdwnLite(alert.AlertID),
+		slackMrkdwnLite(alert.DedupKey),
+		slackMrkdwnLite(alert.AlertCreationTime),
+		slackMrkdwnLite(alert.AlertUpdateTime),
+	)
+
+	var eventSection string
+	if alert.Event != nil {
+		ev := alert.Event
+		eventSection = strings.Join([]string{
+			fmt.Sprintf("*event name:* %s", slackMrkdwnLite(ev.EventName)),
+			fmt.Sprintf("*event source:* %s", slackMrkdwnLite(ev.EventSource)),
+			fmt.Sprintf("*source ip:* %s", slackMrkdwnLite(ev.SourceIPAddress)),
+			fmt.Sprintf("*region:* %s", slackMrkdwnLite(ev.AWSRegion)),
+			fmt.Sprintf("*account id:* %s", slackMrkdwnLite(ev.RecipientAccountID)),
+		}, "\n")
+	} else {
+		eventSection = "_no event payload_"
 	}
 
-	if alert.Event != nil {
-		fields = append(fields,
-			slackAttachField{
-				Title: "event name",
-				Value: alert.Event.EventName,
-				Short: true,
+	blocks := []slackBlock{
+		{
+			Type: "header",
+			Text: &slackTextNode{
+				Type: "plain_text",
+				Text: truncateSlackHeaderPlain(alert.Title),
 			},
-			slackAttachField{
-				Title: "event source",
-				Value: alert.Event.EventSource,
-				Short: true,
+		},
+		{
+			Type: "section",
+			Text: &slackTextNode{
+				Type: "mrkdwn",
+				Text: meta,
 			},
-			slackAttachField{
-				Title: "source ip",
-				Value: alert.Event.SourceIPAddress,
-				Short: true,
+		},
+		{
+			Type: "section",
+			Text: &slackTextNode{
+				Type: "mrkdwn",
+				Text: eventSection,
 			},
-			slackAttachField{
-				Title: "region",
-				Value: alert.Event.AWSRegion,
-				Short: true,
-			},
-			slackAttachField{
-				Title: "account id",
-				Value: alert.Event.RecipientAccountID,
-				Short: true,
-			},
-		)
+		},
 	}
 
 	return slackMessage{
 		Attachments: []slackAttachment{
 			{
-				Color: color,
-				Blocks: []slackBlock{
-					{
-						Type: "header",
-						Text: &slackTextNode{
-							Type: "plain_text",
-							Text: alert.Title,
-						},
-					},
-					{
-						Type: "section",
-						Text: &slackTextNode{
-							Type: "mrkdwn",
-							Text: fmt.Sprintf("*created:* %s\n*updated:* %s",
-								alert.AlertCreationTime, alert.AlertUpdateTime),
-						},
-					},
-				},
-				Fields: fields,
+				Color:  color,
+				Blocks: blocks,
 			},
 		},
 	}

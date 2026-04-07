@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/bilals12/iota/internal/engine"
 )
@@ -32,15 +35,9 @@ type slackTextNode struct {
 }
 
 type slackAttachment struct {
-	Color  string             `json:"color"`
-	Blocks []slackBlock       `json:"blocks,omitempty"`
-	Fields []slackAttachField `json:"fields,omitempty"`
-}
-
-type slackAttachField struct {
-	Title string `json:"title"`
-	Value string `json:"value"`
-	Short bool   `json:"short"`
+	Color  string       `json:"color"`
+	Blocks []slackBlock `json:"blocks,omitempty"`
+	// Do not set legacy Fields on the same attachment as Blocks — Slack returns 400.
 }
 
 func NewSlackClient(webhookURL string) *SlackClient {
@@ -67,14 +64,51 @@ func (s *SlackClient) SendAlert(match engine.Match) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("slack returned status %d", resp.StatusCode)
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return fmt.Errorf("slack returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 
 	return nil
 }
 
+// slackHeaderPlainMax is Slack's max length for header block plain_text.
+const slackHeaderPlainMax = 150
+
+func truncateSlackHeaderPlain(s string) string {
+	if utf8.RuneCountInString(s) <= slackHeaderPlainMax {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:slackHeaderPlainMax-1]) + "…"
+}
+
 func (s *SlackClient) formatMessage(match engine.Match) slackMessage {
 	color := getSeverityColor(match.Severity)
+
+	summary := fmt.Sprintf("*severity:* %s\n*rule:* %s\n*dedup:* %s",
+		slackMrkdwnLite(match.Severity),
+		slackMrkdwnLite(match.RuleID),
+		slackMrkdwnLite(match.Dedup))
+
+	var eventLines []string
+	if match.Event != nil {
+		ev := match.Event
+		uidType := ""
+		if ev.UserIdentity.Type != "" {
+			uidType = ev.UserIdentity.Type
+		}
+		eventLines = append(eventLines,
+			fmt.Sprintf("*event name:* %s", slackMrkdwnLite(ev.EventName)),
+			fmt.Sprintf("*event source:* %s", slackMrkdwnLite(ev.EventSource)),
+			fmt.Sprintf("*source ip:* %s", slackMrkdwnLite(ev.SourceIPAddress)),
+			fmt.Sprintf("*region:* %s", slackMrkdwnLite(ev.AWSRegion)),
+			fmt.Sprintf("*user identity type:* %s", slackMrkdwnLite(uidType)),
+			fmt.Sprintf("*account id:* %s", slackMrkdwnLite(ev.RecipientAccountID)),
+		)
+	} else {
+		eventLines = []string{"_no event payload_"}
+	}
+	eventSection := strings.Join(eventLines, "\n")
 
 	return slackMessage{
 		Attachments: []slackAttachment{
@@ -85,53 +119,35 @@ func (s *SlackClient) formatMessage(match engine.Match) slackMessage {
 						Type: "header",
 						Text: &slackTextNode{
 							Type: "plain_text",
-							Text: match.Title,
+							Text: truncateSlackHeaderPlain(match.Title),
 						},
 					},
 					{
 						Type: "section",
 						Text: &slackTextNode{
 							Type: "mrkdwn",
-							Text: fmt.Sprintf("*severity:* %s\n*rule:* %s\n*dedup:* %s",
-								match.Severity, match.RuleID, match.Dedup),
+							Text: summary,
 						},
 					},
-				},
-				Fields: []slackAttachField{
 					{
-						Title: "event name",
-						Value: match.Event.EventName,
-						Short: true,
-					},
-					{
-						Title: "event source",
-						Value: match.Event.EventSource,
-						Short: true,
-					},
-					{
-						Title: "source ip",
-						Value: match.Event.SourceIPAddress,
-						Short: true,
-					},
-					{
-						Title: "region",
-						Value: match.Event.AWSRegion,
-						Short: true,
-					},
-					{
-						Title: "user identity type",
-						Value: match.Event.UserIdentity.Type,
-						Short: true,
-					},
-					{
-						Title: "account id",
-						Value: match.Event.RecipientAccountID,
-						Short: true,
+						Type: "section",
+						Text: &slackTextNode{
+							Type: "mrkdwn",
+							Text: eventSection,
+						},
 					},
 				},
 			},
 		},
 	}
+}
+
+// slackMrkdwnLite escapes characters that break mrkdwn or annoy Slack in simple labels.
+func slackMrkdwnLite(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	return s
 }
 
 func getSeverityColor(severity string) string {

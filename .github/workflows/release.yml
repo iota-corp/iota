@@ -9,6 +9,9 @@
 # 2) Push tag v*.*.* or workflow_dispatch: build binaries, Docker image (linux/amd64),
 #    bump iota-deployments, sync .release-please-manifest.json on main.
 #
+# Docker: tags are derived from RELEASE_TAG (vX.Y.Z, X.Y.Z, X.Y, X, latest). On workflow_dispatch,
+# github.ref stays refs/heads/main, so docker/metadata semver-only tags would only publish :latest.
+#
 # Local: ./scripts/next-release-version.sh && git tag … && git push origin <tag>
 # -----------------------------------------------------------------------------
 
@@ -136,15 +139,36 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      # RELEASE_TAG matches the git tag (e.g. v0.7.1). workflow_dispatch leaves github.ref as main,
+      # so semver-based metadata tags would not run — compute variants explicitly.
+      - name: Docker tag variants from release
+        id: dockertags
+        env:
+          RELEASE_TAG: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::RELEASE_TAG must look like v0.7.1, got: ${RELEASE_TAG}"
+            exit 1
+          fi
+          plain="${RELEASE_TAG#v}"
+          mm="${plain%.*}"
+          m="${plain%%.*}"
+          echo "with_v=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "no_v=${plain}" >> "$GITHUB_OUTPUT"
+          echo "major_minor=${mm}" >> "$GITHUB_OUTPUT"
+          echo "major=${m}" >> "$GITHUB_OUTPUT"
+
       # Docker Hub image (bilals12); GitHub org (iota-corp) is unrelated to docker.io namespaces.
       - uses: docker/metadata-action@v5
         id: meta
         with:
           images: bilals12/iota
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
+            type=raw,value=${{ steps.dockertags.outputs.with_v }}
+            type=raw,value=${{ steps.dockertags.outputs.no_v }}
+            type=raw,value=${{ steps.dockertags.outputs.major_minor }}
+            type=raw,value=${{ steps.dockertags.outputs.major }}
             type=raw,value=latest
 
       - uses: docker/build-push-action@v6

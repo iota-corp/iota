@@ -381,9 +381,9 @@ key components:
 
 ## releases & docker image
 
-Pushes to **`main`** can create the next **`v*.*.*`** tag automatically (see [`docs/breaking-changes.md`](docs/breaking-changes.md)). That tag triggers **[`.github/workflows/release.yml`](.github/workflows/release.yml)**: linux binaries on the GitHub release, a **linux/amd64** **`bilals12/iota`** image push to Docker Hub (namespace matches **`DOCKERHUB_USERNAME`**), and a manifest sync on `main`. Locally, run `./scripts/next-release-version.sh`, then `git tag` / `git push origin <tag>` (see **`make release-help`**).
+Pushes to **`main`** can create the next **`v*.*.*`** tag automatically (see [`docs/breaking-changes.md`](docs/breaking-changes.md)). That tag triggers **[`.github/workflows/release.yml`](.github/workflows/release.yml)**: linux binaries on the GitHub release, a **linux/amd64** **`bilals12/iota`** push to Docker Hub with both **`0.x.y`** and **`vx.x.y`** tags (so **`newTag:`** can match the git tag), and a manifest sync on `main`. Locally, run `./scripts/next-release-version.sh`, then `git tag` / `git push origin <tag>` (see **`make release-help`**).
 
-**Secrets:** **`RELEASE_PLEASE_TOKEN`** (PAT, **contents: write**) so tag pushes trigger publish jobs. **`DOCKERHUB_USERNAME`** / **`DOCKERHUB_PASSWORD`** must be able to push **`bilals12/iota`** on Docker Hub. **optional — bump [`iota-deployments`](https://github.com/iota-corp/iota-deployments):** add **`IOTA_DEPLOYMENTS_TOKEN`** (PAT: **contents: read and write** on **`iota-corp/iota-deployments`**). The workflow updates **`clusters/homelab/kustomization.yaml`** and **`clusters/eks-lab/kustomization.yaml`** **`newTag:`** to match the release so Argo CD can reconcile. If unset, the job skips with a notice.
+**Secrets:** **`RELEASE_PLEASE_TOKEN`** (PAT, **contents: write**) so tag pushes trigger publish jobs. **`DOCKERHUB_USERNAME`** / **`DOCKERHUB_PASSWORD`** must be able to push **`bilals12/iota`**. **optional — bump [`iota-deployments`](https://github.com/iota-corp/iota-deployments):** add **`IOTA_DEPLOYMENTS_TOKEN`** (PAT: **contents: read and write** on **`iota-corp/iota-deployments`**). The workflow sets **`newTag:`** to the release git tag (e.g. **`v0.7.1`**). For org PAT **403**s, see **[docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)**.
 
 ## development
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/bilals12/iota/internal/alertforwarder"
+	"github.com/bilals12/iota/internal/metrics"
 )
 
 type SlackOutput struct {
@@ -41,14 +42,17 @@ func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert
 
 	resp, err := s.client.Do(req)
 	if err != nil {
+		metrics.RecordAlertForwarded("slack", "failure")
 		return fmt.Errorf("post to slack: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		metrics.RecordAlertForwarded("slack", "failure")
 		return fmt.Errorf("slack returned status %d", resp.StatusCode)
 	}
 
+	metrics.RecordAlertForwarded("slack", "success")
 	return nil
 }
 

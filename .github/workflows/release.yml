@@ -136,10 +136,11 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_PASSWORD }}
 
+      # Docker Hub image (bilals12); GitHub org (iota-corp) is unrelated to docker.io namespaces.
       - uses: docker/metadata-action@v5
         id: meta
         with:
-          images: iota-corp/iota
+          images: bilals12/iota
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -169,7 +170,7 @@ jobs:
         run: |
           if [ -z "${PAT:-}" ]; then
             echo "run=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Set repository secret IOTA_DEPLOYMENTS_TOKEN in iota-corp/iota to auto-bump iota-corp/iota-deployments on each release tag."
+            echo "::notice::Set repository secret IOTA_DEPLOYMENTS_TOKEN on GitHub (iota-corp/iota) to auto-bump iota-corp/iota-deployments on each release tag."
           else
             echo "run=true" >> "$GITHUB_OUTPUT"
           fi

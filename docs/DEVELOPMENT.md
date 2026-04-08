@@ -58,6 +58,23 @@ High level:
 
 Under pressure, use **`alerts list`** for triage; use **`query`** for hunting. **`scripts/benchmark-alert-query.sh`** runs repeated **`alerts list`** for a rough wall-clock baseline.
 
+**Data lake (so `iota query` has JSON to scan)**
+
+1. Set **`DATA_LAKE_BUCKET`** in **`iota-deployments`** (same bucket as CloudTrail delivery is OK: iota writes under **`logs/<slug>/year=…/hour=…/*.json.gz`**, separate from AWS’s trail object layout). The Deployment passes **`--data-lake-bucket=$(DATA_LAKE_BUCKET)`**; when empty, the writer is off and the lake has nothing to query.
+2. **IAM:** the identity in **`iota-aws`** (homelab) or IRSA role (EKS) needs **`s3:PutObject`** (and related) on that bucket. If writes fail, check pod logs and **`iota_processing_errors_total{component="datalake"}`** on **`/metrics`**.
+3. **`iota query`** defaults **`--s3-bucket`** from env, first match: **`IOTA_S3_BUCKET`**, **`IOTA_DATA_LAKE_BUCKET`**, **`DATA_LAKE_BUCKET`**. Inside the pod, with **`DATA_LAKE_BUCKET`** set, you can run **`kubectl exec … -- /app/iota query …`** without repeating the bucket name.
+4. Lake rows are **normalized CloudTrail-shaped JSON** (see **`pkg/cloudtrail.Event`**): top-level fields such as **`eventName`**, **`eventSource`**, **`sourceIPAddress`**, **`awsRegion`**, **`recipientAccountId`**, plus nested **`userIdentity`**. DuckDB exposes columns from **`read_ndjson`**; filter on top-level fields first, then use **`json()`** / **`->>`** if you need nested paths. Example:
+
+```text
+/app/iota query --log-type=cloudtrail --last=24h --output=table \
+  --sql="SELECT eventName, eventSource, sourceIPAddress, recipientAccountId FROM {TABLE}
+         WHERE eventName = 'ListManagedNotificationEvents'
+           AND sourceIPAddress = '173.33.31.53'
+         LIMIT 50"
+```
+
+Use **`--start`** / **`--end`** (RFC3339) for an alert’s **`created`–`updated`** window. For Athena instead of DuckDB, set **`IOTA_ATHENA_*`** env vars and **`--force-athena`** when wired.
+
 Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** § Observability for a short checklist.
 
 ---

@@ -243,10 +243,12 @@ jobs:
             exit 1
           fi
 
+      # Pattern must not be `iota-*`: Docker/GHA cache artifacts like `iota-corp~repo~….dockerbuild`
+      # also match and break download/extract (binary-only job).
       - name: Download binaries
         uses: actions/download-artifact@v4
         with:
-          pattern: iota-*
+          pattern: iota-linux-*
           merge-multiple: true
           path: release-assets
 

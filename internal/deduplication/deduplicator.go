@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/bilals12/iota/internal/metrics"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -35,8 +36,10 @@ func New(stateFile string) (*Deduplicator, error) {
 
 	if err := initDedupDB(db); err != nil {
 		db.Close()
+		metrics.RecordStateDBOperation("dedup_init_schema", "error")
 		return nil, fmt.Errorf("init dedup db: %w", err)
 	}
+	metrics.RecordStateDBOperation("dedup_init_schema", "success")
 
 	return &Deduplicator{db: db}, nil
 }
@@ -57,11 +60,23 @@ func initDedupDB(db *sql.DB) error {
 			ON alerts(rule_id, dedup_key, resolved_at);
 		CREATE INDEX IF NOT EXISTS idx_alerts_rule_dedup
 			ON alerts(rule_id, dedup_key) WHERE resolved_at IS NULL;
+		CREATE INDEX IF NOT EXISTS idx_alerts_open_by_updated
+			ON alerts(updated_at) WHERE resolved_at IS NULL;
 	`)
 	return err
 }
 
-func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title, severity string, dedupPeriodMinutes int) (*AlertInfo, error) {
+func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title, severity string, dedupPeriodMinutes int) (info *AlertInfo, err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("update_alert_info", time.Since(start))
+		metrics.RecordStateDBOperation("update_alert_info", st)
+	}()
+
 	dedupKey := GenerateDedupKey(ruleID, dedup)
 	now := time.Now()
 	dedupThreshold := now.Add(-time.Duration(dedupPeriodMinutes) * time.Minute)
@@ -97,7 +112,7 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 			return nil, fmt.Errorf("commit: %w", err)
 		}
 
-		return &AlertInfo{
+		info = &AlertInfo{
 			AlertID:           alertID,
 			RuleID:            ruleID,
 			DedupKey:          dedupKey,
@@ -105,7 +120,8 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 			AlertUpdateTime:   now,
 			Title:             title,
 			Severity:          severity,
-		}, nil
+		}
+		return info, nil
 	}
 
 	if err != nil {
@@ -133,7 +149,7 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 			return nil, fmt.Errorf("commit: %w", err)
 		}
 
-		return &AlertInfo{
+		info = &AlertInfo{
 			AlertID:           alertID,
 			RuleID:            ruleID,
 			DedupKey:          dedupKey,
@@ -141,7 +157,8 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 			AlertUpdateTime:   now,
 			Title:             title,
 			Severity:          severity,
-		}, nil
+		}
+		return info, nil
 	}
 
 	_, err = tx.ExecContext(ctx, `
@@ -155,7 +172,7 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	return &AlertInfo{
+	info = &AlertInfo{
 		AlertID:           existing.AlertID,
 		RuleID:            ruleID,
 		DedupKey:          dedupKey,
@@ -163,17 +180,38 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 		AlertUpdateTime:   now,
 		Title:             title,
 		Severity:          severity,
-	}, nil
+	}
+	return info, nil
 }
 
-func (d *Deduplicator) ResolveAlert(ctx context.Context, alertID string) error {
-	_, err := d.db.ExecContext(ctx, `
+func (d *Deduplicator) ResolveAlert(ctx context.Context, alertID string) (err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("resolve_alert", time.Since(start))
+		metrics.RecordStateDBOperation("resolve_alert", st)
+	}()
+
+	_, err = d.db.ExecContext(ctx, `
 		UPDATE alerts SET resolved_at = ? WHERE alert_id = ? AND resolved_at IS NULL
 	`, time.Now(), alertID)
 	return err
 }
 
-func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) ([]AlertInfo, error) {
+func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) (alerts []AlertInfo, err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("get_open_alerts", time.Since(start))
+		metrics.RecordStateDBOperation("get_open_alerts", st)
+	}()
+
 	rows, err := d.db.QueryContext(ctx, `
 		SELECT alert_id, rule_id, dedup_key, created_at, updated_at, title, severity
 		FROM alerts
@@ -185,7 +223,50 @@ func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) ([]Aler
 	}
 	defer rows.Close()
 
-	var alerts []AlertInfo
+	for rows.Next() {
+		var a AlertInfo
+		if err := rows.Scan(&a.AlertID, &a.RuleID, &a.DedupKey, &a.AlertCreationTime, &a.AlertUpdateTime, &a.Title, &a.Severity); err != nil {
+			return nil, err
+		}
+		alerts = append(alerts, a)
+	}
+	return alerts, rows.Err()
+}
+
+// ListOpenAlertsAll returns open alerts across all rules (newest activity first). For IR review and benchmarks.
+func (d *Deduplicator) ListOpenAlertsAll(ctx context.Context, limit, offset int) (alerts []AlertInfo, err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("list_open_alerts_all", time.Since(start))
+		metrics.RecordStateDBOperation("list_open_alerts_all", st)
+	}()
+
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 50000 {
+		limit = 50000
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	rows, err := d.db.QueryContext(ctx, `
+		SELECT alert_id, rule_id, dedup_key, created_at, updated_at, title, severity
+		FROM alerts
+		WHERE resolved_at IS NULL
+		ORDER BY updated_at DESC
+		LIMIT ? OFFSET ?
+	`, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
 	for rows.Next() {
 		var a AlertInfo
 		if err := rows.Scan(&a.AlertID, &a.RuleID, &a.DedupKey, &a.AlertCreationTime, &a.AlertUpdateTime, &a.Title, &a.Severity); err != nil {

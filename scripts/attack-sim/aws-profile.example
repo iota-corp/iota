@@ -1,0 +1,38 @@
+# Example AWS CLI profiles for soak testing (do not commit real secrets).
+#
+# Goal: use a profile such as `iota-soak` that is NOT your normal day-to-day
+# profile (e.g. `iota-lab`), so destructive soak APIs never run as your main IAM user.
+#
+# --- Option A: IAM user `iota-soak` with access keys (simplest) ---
+#
+# 1. As a lab admin, create user iota-soak and AdministratorAccess (lab only).
+# 2. aws configure --profile iota-soak
+# 3. export AWS_PROFILE=iota-soak
+#
+# ~/.aws/config
+# [profile iota-soak]
+# region = us-east-1
+# output = json
+#
+# ~/.aws/credentials
+# [iota-soak]
+# aws_access_key_id = AKIA...
+# aws_secret_access_key = ...
+#
+# --- Option B: assume role into a soak role (no static keys for the soak principal) ---
+#
+# Create role `iota-soak-role` in the lab account with AdministratorAccess (lab only)
+# and a trust policy allowing your normal user or SSO role to sts:AssumeRole.
+#
+# ~/.aws/config
+# [profile iota-soak]
+# role_arn = arn:aws:iam::YOUR_LAB_ACCOUNT_ID:role/iota-soak-role
+# source_profile = iota-lab
+# region = us-east-1
+#
+# Then: export AWS_PROFILE=iota-soak
+#
+# --- Option C: separate AWS Organization account ---
+#
+# Use a dedicated member account for soak; create iota-soak IAM user or SSO there,
+# and point CloudTrail + iota integration at that account’s trail for pipeline tests.

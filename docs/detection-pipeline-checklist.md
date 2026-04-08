@@ -17,7 +17,7 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 ## Not wired yet (known gaps)
 
 - [ ] **`--download-workers` / `--process-workers`**: Parsed in `main` but **not applied** to SQS mode today; processing is effectively **one S3 object at a time** per goroutine path. Parallel object processing is a future improvement.
-- [ ] **Rule evaluation**: Every event is evaluated against **all** loaded rules; shrinking `--rules` to the directories you need reduces CPU.
+- [ ] **Rule evaluation cost**: Every event is still evaluated against **all** loaded rules; shrinking `--rules` reduces CPU — metrics now expose **`match`/`no_match`** counts per **`rule_id`** to spot hot rules.
 
 ## Observability
 
@@ -25,6 +25,8 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
   `detection: rule_id=… severity=… eventSource=… eventName=… title="…"`
   (**SQS** and **EventBridge** paths), followed by `processed N events, M matches …`.
 - [x] **Prometheus**: `iota_alerts_generated_total` increments per deduped alert; `iota_events_processed_total{log_type="AWS.CloudTrail"}` after traffic.
+- [x] **Rule evaluation volume**: `iota_rules_evaluated_total{rule_id,result}` (`result` = `match` | `no_match`) from engine batch aggregates.
+- [x] **State DB**: `iota_statedb_operations_total` and `iota_statedb_operation_duration_seconds` for dedup + pipeline state SQLite ops.
 - [x] **Slack**: `iota_alerts_forwarded_total{output_type="slack",status="success|failure"}`; failures also surface as forwarder errors in logs.
 
 ## Product / positioning

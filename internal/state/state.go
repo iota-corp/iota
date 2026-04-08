@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"time"
 
+	"github.com/bilals12/iota/internal/metrics"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -31,8 +33,10 @@ func Open(path string) (*DB, error) {
 
 	if _, err = db.Exec(createTableSQL); err != nil {
 		db.Close()
+		metrics.RecordStateDBOperation("state_init_schema", "error")
 		return nil, fmt.Errorf("create table: %w", err)
 	}
+	metrics.RecordStateDBOperation("state_init_schema", "success")
 
 	log.Printf("initialized state database: %s", path)
 
@@ -43,9 +47,19 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-func (d *DB) GetLastProcessedKey(bucket, accountID, region string) (string, error) {
+func (d *DB) GetLastProcessedKey(bucket, accountID, region string) (key string, err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("state_get_last_key", time.Since(start))
+		metrics.RecordStateDBOperation("state_get_last_key", st)
+	}()
+
 	var lastKey sql.NullString
-	err := d.db.QueryRow(
+	err = d.db.QueryRow(
 		"SELECT last_processed_key FROM state WHERE bucket = ? AND account_id = ? AND region = ?",
 		bucket, accountID, region,
 	).Scan(&lastKey)
@@ -63,8 +77,18 @@ func (d *DB) GetLastProcessedKey(bucket, accountID, region string) (string, erro
 	return "", nil
 }
 
-func (d *DB) UpdateLastProcessedKey(bucket, accountID, region, key string) error {
-	_, err := d.db.Exec(`
+func (d *DB) UpdateLastProcessedKey(bucket, accountID, region, key string) (err error) {
+	start := time.Now()
+	defer func() {
+		st := "success"
+		if err != nil {
+			st = "error"
+		}
+		metrics.ObserveStateDBOperation("state_update_last_key", time.Since(start))
+		metrics.RecordStateDBOperation("state_update_last_key", st)
+	}()
+
+	_, err = d.db.Exec(`
 		INSERT INTO state (bucket, account_id, region, last_processed_key, processed_count, last_updated)
 		VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
 		ON CONFLICT(bucket, account_id, region) DO UPDATE SET

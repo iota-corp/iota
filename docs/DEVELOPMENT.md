@@ -46,6 +46,17 @@ High level:
   when a rule matches.
 - **Batch summary:** Processing logs **`processed N events, M matches`** (and similar) after rule evaluation.
 - **Prometheus:** With **`ENABLE_METRICS=true`**, scrape **`/metrics`** (container port **8080** in Kubernetes). Useful series include **`iota_events_processed_total`**, **`iota_alerts_generated_total`**, **`iota_alerts_forwarded_total`** (e.g. **`output_type="slack"`**), and Slack failures via **`status="failure"`**.
+- **Rule throughput:** **`iota_rules_evaluated_total{rule_id,result}`** with **`result`** **`match`** or **`no_match`** — incremented from the Python engine’s per-batch aggregates (not one time series per event).
+- **State / dedup DB:** **`iota_statedb_operations_total{operation,status}`** and **`iota_statedb_operation_duration_seconds{operation}`** — covers dedup **`update_alert_info`**, **`list_open_alerts_all`**, pipeline cursor **`state_get_last_key`** / **`state_update_last_key`**, and schema init.
+
+**Where incident responders query**
+
+| Need | Tool | Latency expectation |
+|------|------|---------------------|
+| Open alerts (deduped rows: rule, severity, title, times) | **`iota alerts list --db /path/to/state.db`** (same file as **`--state`**) | Local SQLite; aim for **ms** on typical limits (use **`--limit` / `--offset`**) |
+| Raw / historical events in the data lake | **`iota query`** (Athena / DuckDB) | Seconds (S3 + engine), not comparable to the dedup path |
+
+Under pressure, use **`alerts list`** for triage; use **`query`** for hunting. **`scripts/benchmark-alert-query.sh`** runs repeated **`alerts list`** for a rough wall-clock baseline.
 
 Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** § Observability for a short checklist.
 

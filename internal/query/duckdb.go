@@ -56,7 +56,9 @@ func NewDuckDB(cfg DuckDBConfig) (*DuckDBClient, error) {
 }
 
 func (c *DuckDBClient) initialize() error {
+	// Default is ~/.duckdb/; in minimal containers HOME may be "/" and /.duckdb is not writable.
 	setup := []string{
+		"SET extension_directory='/tmp/duckdb/extensions'",
 		"INSTALL httpfs",
 		"LOAD httpfs",
 		fmt.Sprintf("SET s3_region='%s'", c.s3Region),

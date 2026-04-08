@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,17 +57,42 @@ func NewDuckDB(cfg DuckDBConfig) (*DuckDBClient, error) {
 	return client, nil
 }
 
+// duckdbLocalDir picks a writable base for extensions + spill files.
+// Many k8s pods mount state under /data but leave /tmp read-only; prefer /data/duckdb then.
+func duckdbLocalDir() string {
+	if v := strings.TrimSpace(os.Getenv("IOTA_DUCKDB_DIR")); v != "" {
+		return filepath.Clean(v)
+	}
+	if fi, err := os.Stat("/data"); err == nil && fi.IsDir() {
+		return "/data/duckdb"
+	}
+	return filepath.Join(os.TempDir(), "iota-duckdb")
+}
+
+func sqlQuotedPath(p string) string {
+	return strings.ReplaceAll(filepath.ToSlash(p), "'", "''")
+}
+
 func (c *DuckDBClient) initialize() error {
-	// Default is ~/.duckdb/; in minimal containers HOME may be "/" and /.duckdb is not writable.
+	base := duckdbLocalDir()
+	extDir := filepath.Join(base, "extensions")
+	tmpDir := filepath.Join(base, "tmp")
+	for _, dir := range []string{extDir, tmpDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return fmt.Errorf("mkdir %s: %w", dir, err)
+		}
+	}
+
+	// Default extension path is ~/.duckdb/; HOME may be "/" in containers. /tmp may be read-only in hardened pods.
 	setup := []string{
-		"SET extension_directory='/tmp/duckdb/extensions'",
+		fmt.Sprintf("SET extension_directory='%s'", sqlQuotedPath(extDir)),
 		"INSTALL httpfs",
 		"LOAD httpfs",
 		fmt.Sprintf("SET s3_region='%s'", c.s3Region),
 		"SET s3_use_ssl=true",
 		fmt.Sprintf("SET memory_limit='%s'", c.memoryLimit),
 		fmt.Sprintf("SET threads=%d", c.threads),
-		"SET temp_directory='/tmp/duckdb'",
+		fmt.Sprintf("SET temp_directory='%s'", sqlQuotedPath(tmpDir)),
 	}
 
 	for _, stmt := range setup {

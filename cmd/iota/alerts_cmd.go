@@ -20,7 +20,8 @@ Commands:
   list    List open (unresolved) alerts from the dedup SQLite DB (same file as --state)
 
 Incident response: use this for fast, enriched rows (rule_id, severity, title, timestamps)
-without going through the data lake. For historical raw events use: iota query (Athena/DuckDB).`)
+without going through the data lake. For hunting in processed lake JSON use: iota query
+(DuckDB/Athena; defaults --s3-bucket from DATA_LAKE_BUCKET / IOTA_DATA_LAKE_BUCKET when set).`)
 	}
 	switch os.Args[2] {
 	case "list":

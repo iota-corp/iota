@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,7 +58,7 @@ func runQueryCmd() error {
 	output := fs.String("output", "table", "Output format: table, json, csv")
 	forceAthena := fs.Bool("force-athena", false, "Force Athena backend")
 	forceDuckDB := fs.Bool("force-duckdb", false, "Force DuckDB backend")
-	s3Bucket := fs.String("s3-bucket", os.Getenv("IOTA_S3_BUCKET"), "S3 bucket for data lake")
+	s3Bucket := fs.String("s3-bucket", defaultQueryS3Bucket(), "S3 bucket for data lake JSON (env: IOTA_S3_BUCKET, IOTA_DATA_LAKE_BUCKET, DATA_LAKE_BUCKET)")
 	s3Region := fs.String("aws-region", getEnvOrDefault("AWS_REGION", "us-east-1"), "AWS region")
 	memoryLimit := fs.String("memory-limit", "4GB", "DuckDB memory limit")
 	workgroup := fs.String("athena-workgroup", os.Getenv("IOTA_ATHENA_WORKGROUP"), "Athena workgroup")
@@ -120,6 +121,17 @@ func getEnvOrDefault(key, defaultVal string) string {
 		return v
 	}
 	return defaultVal
+}
+
+// defaultQueryS3Bucket resolves the lake bucket for `iota query` so kubectl exec
+// picks up the same DATA_LAKE_BUCKET as the running deployment without passing flags.
+func defaultQueryS3Bucket() string {
+	for _, key := range []string{"IOTA_S3_BUCKET", "IOTA_DATA_LAKE_BUCKET", "DATA_LAKE_BUCKET"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func parseDuration(s string) (time.Duration, error) {

@@ -19,6 +19,11 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 - [ ] **`--download-workers` / `--process-workers`**: Parsed in `main` but **not applied** to SQS mode today; processing is effectively **one S3 object at a time** per goroutine path. Parallel object processing is a future improvement.
 - [ ] **Rule evaluation cost**: Every event is still evaluated against **all** loaded rules; shrinking `--rules` reduces CPU — metrics now expose **`match`/`no_match`** counts per **`rule_id`** to spot hot rules.
 
+## Data lake (hunting)
+
+- [ ] **`DATA_LAKE_BUCKET`** set in **`iota-deployments`** so **`--data-lake-bucket`** is non-empty and iota writes **`logs/.../*.json.gz`**. Without it, **`iota query`** has no lake objects (only CloudTrail in AWS helps).
+- [ ] **IAM:** **`s3:PutObject`** (and list/get as needed) on that bucket for the workload identity.
+
 ## Observability
 
 - [x] **Logs**: Each match logs a line

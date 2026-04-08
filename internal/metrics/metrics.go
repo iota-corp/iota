@@ -106,6 +106,15 @@ var (
 		},
 		[]string{"operation", "status"},
 	)
+
+	StateDBOperationDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "iota_statedb_operation_duration_seconds",
+			Help:    "Latency of SQLite state/dedup operations",
+			Buckets: prometheus.ExponentialBuckets(0.0001, 2, 18),
+		},
+		[]string{"operation"},
+	)
 )
 
 func RecordEventProcessed(logType, status string, duration time.Duration) {
@@ -115,6 +124,14 @@ func RecordEventProcessed(logType, status string, duration time.Duration) {
 
 func RecordRuleEvaluated(ruleID, result string) {
 	RulesEvaluatedTotal.WithLabelValues(ruleID, result).Inc()
+}
+
+// RecordRuleEvaluatedCount increments rule evaluation counters by n (aggregated per engine batch).
+func RecordRuleEvaluatedCount(ruleID, result string, n float64) {
+	if n <= 0 {
+		return
+	}
+	RulesEvaluatedTotal.WithLabelValues(ruleID, result).Add(n)
 }
 
 func RecordAlertGenerated(severity, ruleID string) {
@@ -145,6 +162,11 @@ func RecordProcessingError(component, errorType string) {
 
 func RecordStateDBOperation(operation, status string) {
 	StateDBOperationsTotal.WithLabelValues(operation, status).Inc()
+}
+
+// ObserveStateDBOperation records latency for a single state/dedup operation (e.g. update_alert_info).
+func ObserveStateDBOperation(operation string, d time.Duration) {
+	StateDBOperationDuration.WithLabelValues(operation).Observe(d.Seconds())
 }
 
 func Handler() http.Handler {

@@ -33,6 +33,14 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "alerts" {
+		if err := runAlertsCmd(); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
@@ -127,6 +135,12 @@ func parseDuration(s string) (time.Duration, error) {
 }
 
 func run() error {
+	// Subcommands must run before flag.Parse(): the stdlib flag package stops at the first non-flag
+	// argument, so `iota alerts list ...` would otherwise leave --rules unset and fail here.
+	if len(os.Args) > 1 && os.Args[1] == "alerts" {
+		return runAlertsCmd()
+	}
+
 	var (
 		mode               = flag.String("mode", "sqs", "mode: once, watch, s3-poll, sqs, or eventbridge")
 		jsonlFile          = flag.String("jsonl", "", "path to jsonl file (once mode)")

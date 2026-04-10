@@ -3,7 +3,7 @@
 # EKS managed nodes are usually linux/amd64. Building on Apple Silicon defaults to arm64 and
 # yields "exec format error" on the cluster — build with:
 #   docker build --platform linux/amd64 -t <image:tag> .
-FROM golang:1.24-bookworm AS builder
+FROM golang:1.25-bookworm AS builder
 
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \

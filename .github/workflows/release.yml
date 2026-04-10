@@ -104,7 +104,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: go.mod
 
       - name: Install build dependencies
         run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev

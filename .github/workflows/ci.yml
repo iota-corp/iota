@@ -19,7 +19,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: go.mod
 
       - name: Cache Go modules
         uses: actions/cache@v4
@@ -45,12 +45,13 @@ jobs:
           CGO_ENABLED: "1"
         run: ./scripts/smoke.sh
 
+      # Go 1.25 requires golangci-lint v2.4.0+ (v1.x binaries are built with Go 1.24).
       - name: Run linter
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v6
         env:
           CGO_ENABLED: "1"
         with:
-          version: latest
+          version: v2.11.4
 
   build:
     name: Build
@@ -62,7 +63,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.24.x"
+          go-version-file: go.mod
 
       - name: Install CGO build dependencies
         run: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev

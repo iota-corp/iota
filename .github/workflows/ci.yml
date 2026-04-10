@@ -46,8 +46,9 @@ jobs:
         run: ./scripts/smoke.sh
 
       # Go 1.25 requires golangci-lint v2.4.0+ (v1.x binaries are built with Go 1.24).
+      # golangci-lint-action v6 only supports golangci-lint v1; v2 needs action v7+.
       - name: Run linter
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         env:
           CGO_ENABLED: "1"
         with:

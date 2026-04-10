@@ -84,7 +84,7 @@ func (s *HealthServer) readyHandler(w http.ResponseWriter, r *http.Request) {
 
 		if err := s.readiness.Check(ctx); err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(fmt.Sprintf("NOT READY: %v", err)))
+			_, _ = fmt.Fprintf(w, "NOT READY: %v", err)
 			return
 		}
 	}

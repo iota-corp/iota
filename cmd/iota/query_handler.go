@@ -71,7 +71,7 @@ func runQuery(ctx context.Context, cfg QueryConfig) error {
 	if err != nil {
 		return fmt.Errorf("create query engine: %w", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	opts := query.QueryOptions{
 		LogType:     cfg.LogType,
@@ -114,15 +114,15 @@ func outputTable(result *query.QueryResult) error {
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
-	fmt.Fprintln(w, strings.Join(result.Columns, "\t"))
-	fmt.Fprintln(w, strings.Repeat("-", len(result.Columns)*15))
+	_, _ = fmt.Fprintln(w, strings.Join(result.Columns, "\t"))
+	_, _ = fmt.Fprintln(w, strings.Repeat("-", len(result.Columns)*15))
 
 	for _, row := range result.Rows {
 		values := make([]string, len(row))
 		for i, v := range row {
 			values[i] = fmt.Sprintf("%v", v)
 		}
-		fmt.Fprintln(w, strings.Join(values, "\t"))
+		_, _ = fmt.Fprintln(w, strings.Join(values, "\t"))
 	}
 
 	return w.Flush()

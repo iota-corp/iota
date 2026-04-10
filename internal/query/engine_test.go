@@ -39,7 +39,15 @@ func TestBuildS3Paths(t *testing.T) {
 			logType:  "cloudtrail",
 			start:    time.Date(2024, 1, 15, 22, 0, 0, 0, time.UTC),
 			end:      time.Date(2024, 1, 16, 2, 0, 0, 0, time.UTC),
-			expected: 5,
+			// [22:00, 02:00) spans hour partitions 22, 23, 00, 01 — not 02 (exclusive end).
+			expected: 4,
+		},
+		{
+			name:     "one hour aligned RFC3339 exclusive end",
+			logType:  "cloudtrail",
+			start:    time.Date(2026, 4, 8, 19, 0, 0, 0, time.UTC),
+			end:      time.Date(2026, 4, 8, 20, 0, 0, 0, time.UTC),
+			expected: 1,
 		},
 	}
 

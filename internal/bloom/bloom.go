@@ -18,7 +18,7 @@ type Filter struct {
 func Load(path string, expectedItems uint, falsePositiveRate float64) (*Filter, error) {
 	file, err := os.Open(path)
 	if err == nil {
-		defer file.Close()
+		defer func() { _ = file.Close() }()
 		bf := bloom.NewWithEstimates(expectedItems, falsePositiveRate)
 		if _, err := bf.ReadFrom(file); err != nil {
 			log.Printf("failed to read bloom filter, creating new one: %v", err)
@@ -60,17 +60,15 @@ func (f *Filter) Save() error {
 	if err != nil {
 		return fmt.Errorf("create temp file: %w", err)
 	}
+	defer func() { _ = file.Close() }()
 
 	f.mu.RLock()
 	_, err = f.filter.WriteTo(file)
 	f.mu.RUnlock()
 
 	if err != nil {
-		file.Close()
 		return fmt.Errorf("write bloom filter: %w", err)
 	}
-
-	file.Close()
 
 	if err := os.Rename(tmpFile, f.path); err != nil {
 		return fmt.Errorf("rename bloom filter: %w", err)

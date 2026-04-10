@@ -50,7 +50,7 @@ func NewDuckDB(cfg DuckDBConfig) (*DuckDBClient, error) {
 	}
 
 	if err := client.initialize(); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 
@@ -117,7 +117,7 @@ func (c *DuckDBClient) Query(ctx context.Context, sql string) (*QueryResult, err
 	if err != nil {
 		return nil, fmt.Errorf("query: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	columns, err := rows.Columns()
 	if err != nil {
@@ -162,16 +162,20 @@ func (c *DuckDBClient) QueryS3(ctx context.Context, logType string, sqlTemplate 
 	return c.Query(ctx, sql)
 }
 
+// buildS3Paths lists hour partition globs that may contain events in [tr.Start, tr.End).
+// End is exclusive (same idea as --start/--end on the CLI). Using tr.End.Add(time.Hour)
+// would include an extra empty hour and makes DuckDB fail when read_ndjson sees a glob with no files.
 func (c *DuckDBClient) buildS3Paths(logType string, tr TimeRange) []string {
+	if !tr.End.After(tr.Start) {
+		return nil
+	}
 	var paths []string
 	current := tr.Start.Truncate(time.Hour)
-	end := tr.End.Add(time.Hour).Truncate(time.Hour)
-
-	for current.Before(end) {
+	lastHour := tr.End.Add(-time.Nanosecond).Truncate(time.Hour)
+	for !current.After(lastHour) {
 		paths = append(paths, lakepath.S3JSONGlob(c.s3Bucket, logType, current))
 		current = current.Add(time.Hour)
 	}
-
 	return paths
 }
 

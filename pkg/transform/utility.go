@@ -43,6 +43,6 @@ func (t *sendStdout) Transform(ctx context.Context, msg *message.Message) ([]*me
 	if msg.IsControl() {
 		return []*message.Message{msg}, nil
 	}
-	fmt.Fprintln(os.Stdout, msg.String())
+	_, _ = fmt.Fprintln(os.Stdout, msg.String())
 	return []*message.Message{msg}, nil
 }

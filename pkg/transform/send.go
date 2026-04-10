@@ -72,7 +72,7 @@ func (t *sendSlack) Transform(ctx context.Context, msg *message.Message) ([]*mes
 	if err != nil {
 		return nil, fmt.Errorf("transform send_slack: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		respBody, _ := io.ReadAll(resp.Body)
@@ -137,7 +137,7 @@ func (t *sendHTTPPost) Transform(ctx context.Context, msg *message.Message) ([]*
 	if err != nil {
 		return nil, fmt.Errorf("transform send_http_post: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(resp.Body)

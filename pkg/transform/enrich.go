@@ -175,7 +175,7 @@ func (t *enrichHTTPGet) Transform(ctx context.Context, msg *message.Message) ([]
 	if err != nil {
 		return []*message.Message{msg}, nil
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return []*message.Message{msg}, nil

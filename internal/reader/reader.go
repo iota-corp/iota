@@ -34,7 +34,7 @@ func (r *Reader) ReadFile(ctx context.Context, path string) (<-chan *cloudtrail.
 			errs <- fmt.Errorf("open file: %w", err)
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 
 		if err := r.read(ctx, f, events); err != nil {
 			errs <- err

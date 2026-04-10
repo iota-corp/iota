@@ -35,7 +35,7 @@ func New(stateFile string) (*Deduplicator, error) {
 	}
 
 	if err := initDedupDB(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		metrics.RecordStateDBOperation("dedup_init_schema", "error")
 		return nil, fmt.Errorf("init dedup db: %w", err)
 	}
@@ -221,7 +221,7 @@ func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) (alerts
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var a AlertInfo
@@ -265,7 +265,7 @@ func (d *Deduplicator) ListOpenAlertsAll(ctx context.Context, limit, offset int)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var a AlertInfo

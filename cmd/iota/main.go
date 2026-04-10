@@ -275,7 +275,7 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 	if err != nil {
 		return fmt.Errorf("open file: %w", err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	processor := logprocessor.New()
 	processedEvents, errs := processor.Process(ctx, file)
@@ -362,7 +362,7 @@ func runWatch(ctx context.Context, eventsDir, rulesDir, python, enginePy, stateF
 	if err != nil {
 		return fmt.Errorf("create watcher: %w", err)
 	}
-	defer w.Close()
+	defer func() { _ = w.Close() }()
 
 	log.Println("watcher started, press ctrl+c to stop")
 	return w.Watch(ctx)
@@ -421,7 +421,7 @@ func runS3Poll(ctx context.Context, bucket, prefix, region string, interval time
 	if err != nil {
 		return fmt.Errorf("create S3 poller: %w", err)
 	}
-	defer poller.Close()
+	defer func() { _ = poller.Close() }()
 
 	log.Println("S3 poller started, press ctrl+c to stop")
 	return poller.Poll(ctx)

@@ -47,7 +47,7 @@ func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert
 		metrics.RecordAlertForwarded("slack", "failure")
 		return fmt.Errorf("post to slack: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))

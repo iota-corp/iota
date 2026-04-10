@@ -28,13 +28,13 @@ func New(dir string, stateFile string, handler func(string) error) (*Watcher, er
 	}
 
 	if err := initDB(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init db: %w", err)
 	}
 
 	fsWatcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("create fsnotify watcher: %w", err)
 	}
 
@@ -191,7 +191,7 @@ func (w *Watcher) markProcessed(path string) error {
 
 func (w *Watcher) Close() error {
 	if w.watcher != nil {
-		w.watcher.Close()
+		_ = w.watcher.Close()
 	}
 	if w.db != nil {
 		return w.db.Close()

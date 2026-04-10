@@ -46,12 +46,15 @@ func openS3ObjectBody(body io.ReadCloser, key string, contentEncoding *string) (
 	if strings.HasSuffix(keyLower, ".gz") || ce == "gzip" {
 		gz, err := gzip.NewReader(body)
 		if err != nil {
-			body.Close()
+			_ = body.Close()
 			return nil, nil, fmt.Errorf("gzip reader: %w", err)
 		}
-		return gz, func() { gz.Close() }, nil
+		return gz, func() {
+			_ = gz.Close()
+			_ = body.Close()
+		}, nil
 	}
-	return body, func() { body.Close() }, nil
+	return body, func() { _ = body.Close() }, nil
 }
 
 func sqsReceiveConfigFromEnv() (maxMessages, waitTime int32) {
@@ -85,7 +88,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	if err != nil {
 		return fmt.Errorf("open state database: %w", err)
 	}
-	defer stateDB.Close()
+	defer func() { _ = stateDB.Close() }()
 
 	eng := engine.New(python, enginePy, rulesDir)
 
@@ -114,7 +117,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	if err != nil {
 		return fmt.Errorf("create deduplicator: %w", err)
 	}
-	defer dedup.Close()
+	defer func() { _ = dedup.Close() }()
 
 	var outputs []alertforwarder.Output
 	if slackClient != nil {
@@ -134,7 +137,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		} else {
 			dataLakeWriter = datalake.New(s3Client, dataLakeBucket, 50*1024*1024, time.Minute)
 		}
-		defer dataLakeWriter.Flush(ctx)
+		defer func() { _ = dataLakeWriter.Flush(ctx) }()
 	}
 
 	handler := func(ctx context.Context, bucket, key string) error {

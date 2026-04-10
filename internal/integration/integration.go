@@ -35,7 +35,7 @@ func NewManager(stateFile string) (*Manager, error) {
 	}
 
 	if err := initIntegrationDB(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init integration db: %w", err)
 	}
 
@@ -114,7 +114,7 @@ func (m *Manager) List(ctx context.Context) ([]*Integration, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var integrations []*Integration
 	for rows.Next() {

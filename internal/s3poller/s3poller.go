@@ -49,7 +49,7 @@ func New(ctx context.Context, cfg Config) (*S3Poller, error) {
 	}
 
 	if err := initDB(db); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("init db: %w", err)
 	}
 
@@ -163,13 +163,13 @@ func (p *S3Poller) processObject(ctx context.Context, key string, etag string) e
 	if err != nil {
 		return fmt.Errorf("get object: %w", err)
 	}
-	defer result.Body.Close()
+	defer func() { _ = result.Body.Close() }()
 
 	gzReader, err := gzip.NewReader(result.Body)
 	if err != nil {
 		return fmt.Errorf("create gzip reader: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	if err := p.handler(gzReader); err != nil {
 		return fmt.Errorf("handler: %w", err)

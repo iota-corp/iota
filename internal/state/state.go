@@ -32,7 +32,7 @@ func Open(path string) (*DB, error) {
 	}
 
 	if _, err = db.Exec(createTableSQL); err != nil {
-		db.Close()
+		_ = db.Close()
 		metrics.RecordStateDBOperation("state_init_schema", "error")
 		return nil, fmt.Errorf("create table: %w", err)
 	}

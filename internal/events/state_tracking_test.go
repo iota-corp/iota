@@ -15,7 +15,7 @@ func TestStateTrackingIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open state database: %v", err)
 	}
-	defer stateDB.Close()
+	defer func() { _ = stateDB.Close() }()
 
 	bucket := "test-bucket"
 	accountID := "123456789012"
@@ -66,7 +66,7 @@ func TestStateTrackingWithS3KeyParser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open state database: %v", err)
 	}
-	defer stateDB.Close()
+	defer func() { _ = stateDB.Close() }()
 
 	bucket := "test-bucket"
 	key1 := "AWSLogs/123456789012/CloudTrail/us-east-1/2024/12/01/123456789012_CloudTrail_us-east-1_20241201T0005Z_abc123.json.gz"
@@ -143,7 +143,7 @@ func TestDuplicateDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open state database: %v", err)
 	}
-	defer stateDB.Close()
+	defer func() { _ = stateDB.Close() }()
 
 	bucket := "test-bucket"
 	key := "AWSLogs/123456789012/CloudTrail/us-east-1/2024/12/01/123456789012_CloudTrail_us-east-1_20241201T0005Z_abc123.json.gz"

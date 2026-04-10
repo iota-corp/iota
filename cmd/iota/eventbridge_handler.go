@@ -62,7 +62,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 	if err != nil {
 		return fmt.Errorf("create deduplicator: %w", err)
 	}
-	defer dedup.Close()
+	defer func() { _ = dedup.Close() }()
 
 	var outputs []alertforwarder.Output
 	if slackClient != nil {
@@ -82,7 +82,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 		} else {
 			dataLakeWriter = datalake.New(s3Client, dataLakeBucket, 50*1024*1024, time.Minute)
 		}
-		defer dataLakeWriter.Flush(ctx)
+		defer func() { _ = dataLakeWriter.Flush(ctx) }()
 	}
 
 	handler := func(ctx context.Context, eventJSON []byte, logType string, envelope *events.EventBridgeEnvelope) error {

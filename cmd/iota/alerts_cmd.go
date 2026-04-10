@@ -21,7 +21,7 @@ Commands:
 
 Incident response: use this for fast, enriched rows (rule_id, severity, title, timestamps)
 without going through the data lake. For hunting in processed lake JSON use: iota query
-(DuckDB/Athena; defaults --s3-bucket from DATA_LAKE_BUCKET / IOTA_DATA_LAKE_BUCKET when set).`)
+(DuckDB/Athena; defaults --s3-bucket from DATA_LAKE_BUCKET / IOTA_DATA_LAKE_BUCKET when set)`)
 	}
 	switch os.Args[2] {
 	case "list":
@@ -47,7 +47,7 @@ func runAlertsList(args []string) error {
 	if err != nil {
 		return fmt.Errorf("open dedup db: %w", err)
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }()
 
 	start := time.Now()
 	rows, err := d.ListOpenAlertsAll(ctx, *limit, *offset)

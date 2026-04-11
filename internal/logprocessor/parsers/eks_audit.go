@@ -84,7 +84,11 @@ func isEKSAuditShape(m map[string]interface{}) bool {
 	}
 	kind, _ := m["kind"].(string)
 	av, _ := m["apiVersion"].(string)
-	return kind == "Event" && strings.Contains(av, "audit.k8s.io")
+	if kind != "Event" {
+		return false
+	}
+	// Prefix match only (avoid substring matches like "evilaudit.k8s.io/v1")
+	return av == "audit.k8s.io/v1" || strings.HasPrefix(av, "audit.k8s.io/")
 }
 
 func eksAuditID(m map[string]interface{}) string {

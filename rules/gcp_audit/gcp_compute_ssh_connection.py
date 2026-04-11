@@ -56,9 +56,12 @@ def rule(event) -> bool:
                     )
             return bool(modified_keys & ssh_keys)
 
-    # Check direct connections to the serial console
-    # The actual service name has the region included, so we just so an easy check here
-    if service_name.endswith("ssh-serialport.googleapis.com"):
+    # Serial console API: global or regional hostnames (e.g. us-central1-ssh-serialport.googleapis.com).
+    # Use prefix/suffix checks, not bare substring, to satisfy security scanners.
+    if service_name in {
+        "ssh-serialport.googleapis.com",
+        "serialport.googleapis.com",
+    } or (service_name.endswith("-ssh-serialport.googleapis.com")):
         if method_name == "google.ssh-serialport.v1.connect":
             return (
                 "succeeded"

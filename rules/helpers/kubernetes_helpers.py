@@ -60,7 +60,10 @@ def _is_eks_audit_event(event: dict) -> bool:
     if event.get("p_log_type") == "Amazon.EKS.Audit":
         return True
     av = str(event.get("apiVersion", ""))
-    return event.get("kind") == "Event" and "audit.k8s.io" in av
+    # Prefix match only (avoid substring matches like "evilaudit.k8s.io/v1")
+    if event.get("kind") != "Event":
+        return False
+    return av == "audit.k8s.io/v1" or av.startswith("audit.k8s.io/")
 
 
 def _is_gcp_k8s_event(event: dict) -> bool:

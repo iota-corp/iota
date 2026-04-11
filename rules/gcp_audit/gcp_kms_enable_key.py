@@ -4,6 +4,22 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
 from iota_helpers import deep_get
 
+_GCS_PROJECT_SA_DOMAIN = "gs-project-accounts.iam.gserviceaccount.com"
+
+
+def _member_is_gcs_project_service_account(member: object) -> bool:
+    """True if IAM member refers to an email @...gs-project-accounts.iam.gserviceaccount.com."""
+    m = str(member).strip()
+    prefix = "serviceAccount:"
+    if m.lower().startswith(prefix):
+        m = m[len(prefix) :]
+    if "@" not in m:
+        return False
+    domain = m.rsplit("@", 1)[-1].lower()
+    return domain == _GCS_PROJECT_SA_DOMAIN or domain.endswith(
+        "." + _GCS_PROJECT_SA_DOMAIN
+    )
+
 
 def rule(event):
     method_name = deep_get(event, "protoPayload", "methodName")
@@ -36,8 +52,8 @@ def rule(event):
             "encrypt" in role_lower or "decrypt" in role_lower
         ):
             for member in members:
-                # Alert if granting to GCS service account
-                if "gs-project-accounts.iam.gserviceaccount.com" in member:
+                # Alert if granting to GCS project service account (domain match, not substring)
+                if _member_is_gcs_project_service_account(member):
                     return True
 
     return False

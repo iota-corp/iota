@@ -16,11 +16,20 @@ def rule(event):
         default="<UNKNOWN_PRINCIPAL>",
     )
     severity = event.get("severity")
+    principal_domain = (
+        principal.rsplit("@", 1)[-1].lower()
+        if isinstance(principal, str) and "@" in principal
+        else ""
+    )
+    expected_domain = "gs-project-accounts.iam.gserviceaccount.com"
+    gcs_project_sa = principal_domain == expected_domain or principal_domain.endswith(
+        "." + expected_domain
+    )
     return all(
         [
             method_name == "Encrypt",
             service_name == "cloudkms.googleapis.com",
-            "gs-project-accounts.iam.gserviceaccount.com" in principal,
+            gcs_project_sa,
             severity != "ERROR",  # Operation succeeded
         ]
     )

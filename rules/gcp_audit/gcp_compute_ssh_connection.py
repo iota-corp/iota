@@ -57,11 +57,18 @@ def rule(event) -> bool:
             return bool(modified_keys & ssh_keys)
 
     # Serial console API: global or regional hostnames (e.g. us-central1-ssh-serialport.googleapis.com).
-    # Use prefix/suffix checks, not bare substring, to satisfy security scanners.
-    if service_name in {
+    serialport_bases = {
         "ssh-serialport.googleapis.com",
         "serialport.googleapis.com",
-    } or (service_name.endswith("-ssh-serialport.googleapis.com")):
+    }
+    regional_suffix = "-ssh-serialport.googleapis.com"
+    is_regional_serialport = False
+    if service_name.endswith(regional_suffix):
+        region = service_name[: -len(regional_suffix)]
+        # Accept only a single non-empty DNS label before the suffix.
+        is_regional_serialport = bool(region) and "." not in region
+
+    if service_name in serialport_bases or is_regional_serialport:
         if method_name == "google.ssh-serialport.v1.connect":
             return (
                 "succeeded"

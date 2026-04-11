@@ -1,7 +1,7 @@
 """
 Detect password or MFA reset performed by Okta Support.
 
-Ported from Panther: RuleID Okta.Support.Reset
+Source RuleID (upstream): Okta.Support.Reset
 """
 
 import sys

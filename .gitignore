@@ -13,6 +13,11 @@ coverage.txt
 go.work
 go.work.sum
 
+# Local Go build caches (optional; used by smoke scripts when default cache is broken)
+.gocache/
+.gomodcache/
+.gocachemod/
+
 # IDE
 .idea/
 .vscode/
@@ -39,7 +44,7 @@ config.local.yaml
 terraform.tfvars
 *secret*
 *token*
-*webhook*
+# Do not use *webhook* — it ignores legitimate sources (e.g. internal/logprocessor/parsers/github_webhook.go).
 
 # Terraform
 terraform/.terraform/

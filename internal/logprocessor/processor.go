@@ -44,8 +44,17 @@ func NewWithBloomFilter(bloomFilter *bloom.Filter) *Processor {
 
 func getParsers() map[string]parsers.ParserInterface {
 	return map[string]parsers.ParserInterface{
-		"AWS.CloudTrail":            parsers.NewCloudTrailParser(),
-		"AWS.S3ServerAccess":        parsers.NewS3ServerAccessParser(),
+		"Cloudflare.Firewall":        parsers.NewCloudflareFirewallParser(),
+		"Cloudflare.HttpRequest":     parsers.NewCloudflareHTTPRequestParser(),
+		"Slack.AuditLogs":            parsers.NewSlackAuditLogsParser(),
+		"GCP.HTTPLoadBalancer":       parsers.NewGCPHTTPLoadBalancerParser(),
+		"GCP.AuditLog":               parsers.NewGCPAuditLogParser(),
+		"Amazon.EKS.Audit":          parsers.NewEKSAuditParser(),
+		"AWS.BedrockModelInvocation": parsers.NewBedrockModelInvocationParser(),
+		"GitHub.Audit":               parsers.NewGitHubAuditParser(),
+		"GitHub.Webhook":             parsers.NewGitHubWebhookParser(),
+		"AWS.CloudTrail":             parsers.NewCloudTrailParser(),
+		"AWS.S3ServerAccess":         parsers.NewS3ServerAccessParser(),
 		"AWS.VPCFlow":               parsers.NewVPCFlowParser(),
 		"AWS.ALB":                   parsers.NewALBParser(),
 		"AWS.AuroraMySQLAudit":      parsers.NewAuroraMySQLAuditParser(),
@@ -201,6 +210,22 @@ func (p *Processor) ProcessEvent(ctx context.Context, eventJSON []byte, logTypeH
 		return nil, fmt.Errorf("classify event: %w", err)
 	}
 
+	return p.processClassifyResult(ctx, result)
+}
+
+// ProcessLineBestEffort parses one newline-delimited log line. It returns (nil, nil) when no parser
+// matches (e.g. non-JSON or unrelated log types), which is normal for mixed audit backends.
+func (p *Processor) ProcessLineBestEffort(ctx context.Context, line []byte) ([]*ProcessedEvent, error) {
+	if len(bytes.TrimSpace(line)) == 0 {
+		return nil, nil
+	}
+	result, err := p.adaptiveClassifier.Classify(string(line))
+	if err != nil {
+		return nil, nil
+	}
+	if !result.Matched || len(result.Events) == 0 {
+		return nil, nil
+	}
 	return p.processClassifyResult(ctx, result)
 }
 

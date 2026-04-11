@@ -1,7 +1,7 @@
 """
 Detect Org2Org application created or modified (potential impersonation abuse).
 
-Ported from Panther: RuleID Okta.Org2org.Creation.Modification
+Source RuleID (upstream): Okta.Org2org.Creation.Modification
 """
 
 import sys

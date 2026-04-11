@@ -1,7 +1,7 @@
 """
 Detect sign-in from anonymizing VPN/proxy (e.g. Tor, VPN).
 
-Ported from Panther: RuleID Okta.Anonymizing.VPN.Login
+Source RuleID (upstream): Okta.Anonymizing.VPN.Login
 """
 
 import sys

@@ -1,0 +1,1 @@
+{"Action":"block","ClientIP":"1.2.3.4","ClientRequestHost":"example.com","ClientRequestMethod":"POST","Datetime":"2025-12-16 10:30:00","EdgeResponseStatus":403,"Kind":"firewall","RayID":"8e5c2da581234abc","RuleID":"33aa8a8a948b48b28d40450c5fb92fba","Source":"firewallmanaged"}

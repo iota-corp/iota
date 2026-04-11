@@ -2,6 +2,10 @@
 iota helper functions for standalone detection
 """
 
+from collections import OrderedDict
+from collections.abc import Mapping, Sequence
+from typing import Any, Optional, Union
+
 
 def deep_get(dictionary, *keys, default=None):
     """
@@ -20,6 +24,58 @@ def deep_get(dictionary, *keys, default=None):
         else:
             return default
     return result
+
+
+def deep_walk(
+    obj: Optional[Any],
+    *keys: str,
+    default: Optional[Any] = None,
+    return_val: str = "all",
+) -> Union[Any, list, None]:
+    """Traverse dict/list structures; collect values when paths cross lists (SIEM-style list handling)."""
+
+    def _empty_list(sub_obj: Any) -> bool:
+        return (
+            all(_empty_list(next_obj) for next_obj in sub_obj)
+            if isinstance(sub_obj, Sequence) and not isinstance(sub_obj, str)
+            else False
+        )
+
+    if not keys:
+        return default if _empty_list(obj) else obj
+
+    current_key = keys[0]
+    found: OrderedDict = OrderedDict()
+
+    if isinstance(obj, Mapping):
+        next_key = obj.get(current_key, None)
+        return (
+            deep_walk(next_key, *keys[1:], default=default, return_val=return_val)
+            if next_key is not None
+            else default
+        )
+    if isinstance(obj, Sequence) and not isinstance(obj, str):
+        for item in obj:
+            value = deep_walk(item, *keys, default=default, return_val=return_val)
+            if value is not None:
+                if isinstance(value, Sequence) and not isinstance(value, str):
+                    for sub_item in value:
+                        found[sub_item] = None
+                else:
+                    found[value] = None
+
+    found_list: list[Any] = list(found.keys())
+    if not found_list:
+        return default
+    return {
+        "first": found_list[0],
+        "last": found_list[-1],
+        "all": found_list[0] if len(found_list) == 1 else found_list,
+    }.get(return_val, "all")
+
+
+def key_value_list_to_dict(list_objects: list, key: str, value: str) -> dict:
+    return {item[key]: item[value] for item in list_objects}
 
 
 def aws_rule_context(event):

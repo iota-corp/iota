@@ -14,6 +14,33 @@ func TestCanonicalLogType(t *testing.T) {
 	if got, want := CanonicalLogType("AWS.CloudTrail"), "AWS.CloudTrail"; got != want {
 		t.Errorf("CanonicalLogType(AWS.CloudTrail) = %q, want %q", got, want)
 	}
+	if got, want := CanonicalLogType("bedrock"), "AWS.BedrockModelInvocation"; got != want {
+		t.Errorf("CanonicalLogType(bedrock) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("github"), "GitHub.Audit"; got != want {
+		t.Errorf("CanonicalLogType(github) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("github.webhook"), "GitHub.Webhook"; got != want {
+		t.Errorf("CanonicalLogType(github.webhook) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("gcp"), "GCP.AuditLog"; got != want {
+		t.Errorf("CanonicalLogType(gcp) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("gcp.httplb"), "GCP.HTTPLoadBalancer"; got != want {
+		t.Errorf("CanonicalLogType(gcp.httplb) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("eks"), "Amazon.EKS.Audit"; got != want {
+		t.Errorf("CanonicalLogType(eks) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("slack"), "Slack.AuditLogs"; got != want {
+		t.Errorf("CanonicalLogType(slack) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("cloudflare.firewall"), "Cloudflare.Firewall"; got != want {
+		t.Errorf("CanonicalLogType(cloudflare.firewall) = %q, want %q", got, want)
+	}
+	if got, want := CanonicalLogType("cfhttp"), "Cloudflare.HttpRequest"; got != want {
+		t.Errorf("CanonicalLogType(cfhttp) = %q, want %q", got, want)
+	}
 }
 
 func TestTableSlug(t *testing.T) {

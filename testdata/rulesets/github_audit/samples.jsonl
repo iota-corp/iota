@@ -1,0 +1,3 @@
+{"p_log_type":"GitHub.Audit","action":"repo.create","actor":"alice","created_at":1710000000000,"id":"evt-github-audit-1"}
+{"action":"org.update_member_role","actor":"admin","created_at":1710000001000,"id":"evt-github-audit-2"}
+{"p_log_type":"GitHub.Audit","action":"integration_installation.create","actor":"svc","name":"SomeApp","org":"acme","created_at":1710000002000}

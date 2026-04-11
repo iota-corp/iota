@@ -1,7 +1,7 @@
 """
 Detect Okta rate limit / concurrency limit events (potential DoS or brute force).
 
-Ported from Panther: RuleID Okta.Rate.Limits
+Source RuleID (upstream): Okta.Rate.Limits
 """
 
 from fnmatch import fnmatch

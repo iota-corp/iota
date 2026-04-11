@@ -1,7 +1,7 @@
 """
 Detect unauthorized access attempt to an Okta application.
 
-Ported from Panther: RuleID Okta.App.Unauthorized.Access.Attempt
+Source RuleID (upstream): Okta.App.Unauthorized.Access.Attempt
 """
 
 import sys

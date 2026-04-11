@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/bilals12/iota/internal/alerts"
+	"github.com/bilals12/iota/internal/audittail"
 	"github.com/bilals12/iota/internal/api"
 	"github.com/bilals12/iota/internal/engine"
 	"github.com/bilals12/iota/internal/logprocessor"
@@ -154,9 +156,12 @@ func run() error {
 	}
 
 	var (
-		mode               = flag.String("mode", "sqs", "mode: once, watch, s3-poll, sqs, or eventbridge")
+		mode               = flag.String("mode", "sqs", "mode: once, watch, s3-poll, sqs, eventbridge, or audit-tail")
 		jsonlFile          = flag.String("jsonl", "", "path to jsonl file (once mode)")
 		eventsDir          = flag.String("events-dir", "", "path to events directory (watch mode)")
+		auditLogPath       = flag.String("audit-log", "", "path to Kubernetes audit log (audit-tail); default IOTA_AUDIT_LOG or /var/lib/rancher/k3s/server/logs/audit.log")
+		auditFromStart     = flag.Bool("audit-from-start", false, "audit-tail: if no saved cursor, read from start of file instead of EOF")
+		auditPollInterval  = flag.Duration("audit-poll-interval", time.Second, "audit-tail: poll interval when the log is idle")
 		s3Bucket           = flag.String("s3-bucket", "", "S3 bucket name (s3-poll or sqs mode)")
 		s3Prefix           = flag.String("s3-prefix", "AWSLogs/", "S3 prefix (s3-poll mode)")
 		sqsQueueURL        = flag.String("sqs-queue-url", "", "SQS queue URL (sqs or eventbridge mode)")
@@ -181,6 +186,16 @@ func run() error {
 
 	if *rulesDir == "" {
 		return fmt.Errorf("rules flag is required")
+	}
+
+	auditLog := strings.TrimSpace(*auditLogPath)
+	if auditLog == "" {
+		auditLog = getEnvOrDefault("IOTA_AUDIT_LOG", "/var/lib/rancher/k3s/server/logs/audit.log")
+	}
+
+	slackURL := strings.TrimSpace(*slackWebhook)
+	if slackURL == "" {
+		slackURL = strings.TrimSpace(os.Getenv("SLACK_WEBHOOK_URL"))
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -212,8 +227,8 @@ func run() error {
 	}
 
 	var slackClient *alerts.SlackClient
-	if *slackWebhook != "" {
-		slackClient = alerts.NewSlackClient(*slackWebhook)
+	if slackURL != "" {
+		slackClient = alerts.NewSlackClient(slackURL)
 	}
 
 	switch *mode {
@@ -259,8 +274,21 @@ func run() error {
 			}
 		}()
 		return runEventBridge(ctx, *sqsQueueURL, *awsRegion, *rulesDir, *python, *enginePy, *stateFile, *dataLakeBucket, *bloomFile, *bloomExpectedItems, *bloomFalsePositive, *glueDatabase, *athenaWorkgroup, *athenaResultBucket, slackClient)
+	case "audit-tail":
+		healthPort := os.Getenv("HEALTH_PORT")
+		if healthPort == "" {
+			healthPort = "8080"
+		}
+		enableMetrics := os.Getenv("ENABLE_METRICS") == "true"
+		healthServer := api.NewHealthServerWithReadiness(healthPort, nil, enableMetrics)
+		go func() {
+			if err := healthServer.Start(ctx); err != nil {
+				log.Printf("health server error: %v", err)
+			}
+		}()
+		return runAuditTail(ctx, auditLog, *stateFile, *rulesDir, *python, *enginePy, *auditFromStart, *auditPollInterval, slackClient)
 	default:
-		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, sqs, or eventbridge)", *mode)
+		return fmt.Errorf("invalid mode: %s (must be once, watch, s3-poll, sqs, eventbridge, or audit-tail)", *mode)
 	}
 }
 
@@ -313,6 +341,94 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 	}
 
 	return nil
+}
+
+func runAuditTail(ctx context.Context, auditLog, stateFile, rulesDir, python, enginePy string, fromStart bool, poll time.Duration, slackClient *alerts.SlackClient) error {
+	if auditLog == "" {
+		return fmt.Errorf("audit-log path is required in audit-tail mode (or set IOTA_AUDIT_LOG)")
+	}
+
+	log.Printf("audit-tail: watching %s state=%s from-start=%v poll=%v", auditLog, stateFile, fromStart, poll)
+
+	proc := logprocessor.New()
+	eng := engine.New(python, enginePy, rulesDir)
+
+	var mu sync.Mutex
+	var batch []*cloudtrail.Event
+	flush := func() error {
+		if len(batch) == 0 {
+			return nil
+		}
+		events := batch
+		batch = nil
+		matches, err := eng.Analyze(ctx, events)
+		if err != nil {
+			return fmt.Errorf("analyze: %w", err)
+		}
+		for _, m := range matches {
+			if err := handleAlert(m, slackClient); err != nil {
+				log.Printf("error handling alert: %v", err)
+			}
+		}
+		if len(matches) > 0 {
+			log.Printf("audit-tail: batch %d events -> %d rule matches", len(events), len(matches))
+		}
+		return nil
+	}
+
+	flushTicker := time.NewTicker(2 * time.Second)
+	defer flushTicker.Stop()
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-flushTicker.C:
+				mu.Lock()
+				err := flush()
+				mu.Unlock()
+				if err != nil {
+					log.Printf("audit-tail: %v", err)
+				}
+			}
+		}
+	}()
+
+	defer func() {
+		mu.Lock()
+		defer mu.Unlock()
+		if err := flush(); err != nil {
+			log.Printf("audit-tail final flush: %v", err)
+		}
+	}()
+
+	return audittail.Run(ctx, audittail.TailerConfig{
+		Path:         auditLog,
+		StatePath:    stateFile,
+		FromStart:    fromStart,
+		PollInterval: poll,
+	}, func(line []byte) error {
+		processed, err := proc.ProcessLineBestEffort(ctx, line)
+		if err != nil {
+			return err
+		}
+		for _, pe := range processed {
+			mu.Lock()
+			batch = append(batch, pe.Event)
+			n := len(batch)
+			shouldFlush := n >= 64
+			mu.Unlock()
+			if shouldFlush {
+				mu.Lock()
+				err := flush()
+				mu.Unlock()
+				if err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func runWatch(ctx context.Context, eventsDir, rulesDir, python, enginePy, stateFile string, slackClient *alerts.SlackClient) error {

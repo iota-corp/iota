@@ -114,6 +114,23 @@ class Engine:
             return event.get("requestParameters", event)
         if event_source == "1password.com":
             return event.get("requestParameters", event)
+        if event_source == "aws.bedrock.modelinvocation":
+            return event.get("requestParameters", event)
+        if event_source in ("github.com", "github.com.webhook"):
+            return event.get("requestParameters", event)
+        if event_source in (
+            "cloudaudit.googleapis.com",
+            "loadbalancing.googleapis.com",
+        ):
+            return event.get("requestParameters", event)
+        if event_source == "eks.amazonaws.com":
+            return event.get("requestParameters", event)
+        if event_source in (
+            "slack.com",
+            "cloudflare.com.firewall",
+            "cloudflare.com.http_request",
+        ):
+            return event.get("requestParameters", event)
         return event
 
 

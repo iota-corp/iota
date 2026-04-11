@@ -1,7 +1,7 @@
 """
 Detect all MFA factors reset for an Okta user.
 
-Ported from Panther: RuleID Okta.User.MFA.Reset.All
+Source RuleID (upstream): Okta.User.MFA.Reset.All
 """
 
 import sys

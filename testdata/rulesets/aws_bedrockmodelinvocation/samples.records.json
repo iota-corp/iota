@@ -1,0 +1,40 @@
+{
+  "Records": [
+    {
+      "accountId": "111111111111",
+      "identity": {
+        "arn": "arn:aws:sts::111111111111:assumed-role/role_details/suspicious.user"
+      },
+      "modelId": "anthropic.claude-3-haiku-20240307-v1:0",
+      "operation": "Converse",
+      "output": {
+        "outputBodyJson": {
+          "usage": { "inputTokens": 0, "outputTokens": 0, "totalTokens": 5000 }
+        }
+      },
+      "region": "us-west-2",
+      "requestId": "cccccccc-cccc-cccc-cccc-cccccccccc01",
+      "schemaType": "ModelInvocationLog",
+      "schemaVersion": "1.0",
+      "timestamp": "2025-05-15T14:17:22.000000000"
+    },
+    {
+      "accountId": "111111111111",
+      "identity": {
+        "arn": "arn:aws:sts::111111111111:assumed-role/role_details/regular.user"
+      },
+      "modelId": "anthropic.claude-3-haiku-20240307-v1:0",
+      "operation": "ListModels",
+      "output": {
+        "outputBodyJson": {
+          "usage": { "inputTokens": 0, "outputTokens": 0, "totalTokens": 0 }
+        }
+      },
+      "region": "us-west-2",
+      "requestId": "cccccccc-cccc-cccc-cccc-cccccccccc02",
+      "schemaType": "ModelInvocationLog",
+      "schemaVersion": "1.0",
+      "timestamp": "2025-05-15T14:17:22.000000000"
+    }
+  ]
+}

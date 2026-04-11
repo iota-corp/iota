@@ -13,6 +13,24 @@ func CanonicalLogType(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case "cloudtrail":
 		return "AWS.CloudTrail"
+	case "bedrock", "bedrockmodelinvocation", "aws.bedrockmodelinvocation":
+		return "AWS.BedrockModelInvocation"
+	case "github", "github.audit", "githubaudit":
+		return "GitHub.Audit"
+	case "github.webhook", "githubwebhook":
+		return "GitHub.Webhook"
+	case "gcp", "gcp.audit", "gcpaudit", "gcpauditlog":
+		return "GCP.AuditLog"
+	case "gcp.httplb", "gcphttplb", "gcp_httploadbalancer", "httplb":
+		return "GCP.HTTPLoadBalancer"
+	case "eks", "eks.audit", "amazon.eks.audit", "eks_audit":
+		return "Amazon.EKS.Audit"
+	case "slack", "slack.audit", "slackauditlogs":
+		return "Slack.AuditLogs"
+	case "cloudflare", "cloudflare.firewall", "cffw":
+		return "Cloudflare.Firewall"
+	case "cloudflare.http", "cloudflare.httprequest", "cfhttp":
+		return "Cloudflare.HttpRequest"
 	default:
 		return s
 	}

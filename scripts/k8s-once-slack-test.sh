@@ -18,7 +18,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEFAULT_FIXTURE="${ROOT}/testdata/cloudtrail-logs/655631470870_CloudTrail_us-east-1_20250603T0000Z_7H1LZgDVaQGQP5h6.json"
 FIXTURE="${1:-$DEFAULT_FIXTURE}"
-NS="${K8S_NAMESPACE:-security}"
+NS="${K8S_NAMESPACE:-security-test}"
 DEPLOY="${IOTA_DEPLOY:-iota}"
 RULES="${IOTA_RULES:-/app/rules}"
 

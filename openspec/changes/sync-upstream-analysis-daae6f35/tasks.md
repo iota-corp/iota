@@ -4,7 +4,7 @@
 
 ## 2. Rules
 
-- [x] 2.1 Add `rules/aws_cloudtrail/aws_lambda_update_function_code_interactive_identity.py` (from Panther `aws_overwrite_lambda_code`).
+- [x] 2.1 Add `rules/aws_cloudtrail/aws_lambda_update_function_code_interactive_identity.py` (from upstream `aws_overwrite_lambda_code`).
 
 ## 3. Specs and docs
 

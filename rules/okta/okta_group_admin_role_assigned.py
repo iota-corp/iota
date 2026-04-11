@@ -1,7 +1,7 @@
 """
 Detect admin privileges assigned to an Okta group.
 
-Ported from Panther: RuleID Okta.Group.Admin.Role.Assigned
+Source RuleID (upstream): Okta.Group.Admin.Role.Assigned
 """
 
 import sys

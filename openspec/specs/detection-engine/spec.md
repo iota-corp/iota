@@ -52,6 +52,24 @@ The system SHALL automatically discover and load Python rules from the rules dir
 - **WHEN** processing an event with known log type
 - **THEN** only rules matching that log type SHALL be evaluated
 
+**Note:** The reference Python engine (`engines/iota/engine.py`) evaluates every loaded rule against every event in a batch. For production throughput, deployments SHOULD point `--rules` at a single pack or a symlinked subtree (per pipeline / log source) rather than the full tree, or split workloads so each binary does not load unrelated packs. See `openspec/project.md` (Multi-source deployments).
+
+### Requirement: Extended rule packs
+
+The system SHALL support organizing Python detection rules for additional sources under `rules/<logical_source>/` (e.g. `rules/github_audit/`, `rules/gcp_auditlog/`) consistent with upstream YAML rule folders in the mirrored analysis tree under `redteamtools`.
+
+#### Scenario: Ported upstream rule behavior
+
+- **GIVEN** a rule ported from upstream `AnalysisType: rule` with `Threshold: 1` (or equivalent single-shot semantics)
+- **WHEN** the normalized event matches the ported `rule(event)` logic
+- **THEN** the system SHALL emit an alert with `title(event)` and `severity(event)` as for existing rules
+
+#### Scenario: Out of scope upstream patterns
+
+- **GIVEN** a rule that requires upstream scheduled queries, lookup tables, or correlation-only packs (not expressible as per-event Python)
+- **WHEN** planning iota ports
+- **THEN** such rules SHALL be deferred or redesigned; sliding-window and string-set state MAY use `rules/helpers/correlation_store.py` where ported
+
 ### Requirement: Batch Processing
 
 The system SHALL support processing events in batches for efficiency.
@@ -91,5 +109,5 @@ The Python engine SHALL resolve severity by invoking `severity(event)` when the 
 ## Current Implementation
 
 - **Location**: `internal/engine/engine.go`, `engines/iota/engine.py`
-- **Rule Count**: 94 Python rules under `rules/` (excluding `rules/helpers/`), across CloudTrail, IAM, S3 access, VPC Flow, ALB, Okta, GSuite, 1Password
+- **Rule Count**: 254 Python rules under `rules/` (excluding `rules/helpers/`), across CloudTrail, IAM, S3 access, VPC Flow, ALB, Bedrock model invocation, GCP audit and HTTP LB, Kubernetes (EKS/GKE-unified pack), GitHub audit and webhook, Slack audit, Cloudflare firewall/React2Shell, Okta, GSuite, 1Password
 - **Execution**: Python subprocess via `exec.Command`

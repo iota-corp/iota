@@ -9,6 +9,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 export CGO_ENABLED=1
+export GOCACHE="${GOCACHE:-$ROOT/.gocache}"
+export GOMODCACHE="${GOMODCACHE:-$ROOT/.gomodcache}"
+mkdir -p "$GOCACHE" "$GOMODCACHE"
 
 need() {
 	command -v "$1" >/dev/null 2>&1 || {

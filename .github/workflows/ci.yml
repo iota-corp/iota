@@ -13,6 +13,10 @@ jobs:
   test:
     name: Test
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
+    env:
+      # Outside $GITHUB_WORKSPACE so actions/checkout can wipe the clone; smoke.sh defaults would use repo-local caches.
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
       - uses: actions/checkout@v4
 
@@ -24,7 +28,7 @@ jobs:
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
-          path: ~/go/pkg/mod
+          path: ${{ github.workspace }}/../.gomodcache
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
@@ -58,6 +62,9 @@ jobs:
     name: Build
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
     needs: test
+    env:
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +92,9 @@ jobs:
     name: Docker Build
     runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
     needs: test
+    env:
+      GOMODCACHE: ${{ github.workspace }}/../.gomodcache
+      GOCACHE: ${{ github.workspace }}/../.gocache
     steps:
       - uses: actions/checkout@v4
 

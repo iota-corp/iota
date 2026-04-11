@@ -97,13 +97,27 @@ func (s *SlackClient) formatMessage(match engine.Match) slackMessage {
 		if ev.UserIdentity.Type != "" {
 			uidType = ev.UserIdentity.Type
 		}
+		eksAudit := ev.EventSource == "eks.amazonaws.com"
+		srcIP := ev.SourceIPAddress
+		if srcIP == "" && eksAudit {
+			srcIP = "N/A (not present on this audit record)"
+		}
+		region := ev.AWSRegion
+		if region == "" && eksAudit {
+			region = "N/A (Kubernetes audit has no AWS region)"
+		}
+		acct := ev.RecipientAccountID
+		if acct == "" && eksAudit {
+			acct = "N/A (Kubernetes audit has no AWS account)"
+		}
 		eventLines = append(eventLines,
 			fmt.Sprintf("*event name:* %s", slackMrkdwnLite(ev.EventName)),
 			fmt.Sprintf("*event source:* %s", slackMrkdwnLite(ev.EventSource)),
-			fmt.Sprintf("*source ip:* %s", slackMrkdwnLite(ev.SourceIPAddress)),
-			fmt.Sprintf("*region:* %s", slackMrkdwnLite(ev.AWSRegion)),
+			fmt.Sprintf("*source ip:* %s", slackMrkdwnLite(srcIP)),
+			fmt.Sprintf("*user agent:* %s", slackMrkdwnLite(ev.UserAgent)),
+			fmt.Sprintf("*region:* %s", slackMrkdwnLite(region)),
 			fmt.Sprintf("*user identity type:* %s", slackMrkdwnLite(uidType)),
-			fmt.Sprintf("*account id:* %s", slackMrkdwnLite(ev.RecipientAccountID)),
+			fmt.Sprintf("*account id:* %s", slackMrkdwnLite(acct)),
 		)
 	} else {
 		eventLines = []string{"_no event payload_"}
@@ -162,6 +176,8 @@ func getSeverityColor(severity string) string {
 		return "#689f38"
 	case "INFO":
 		return "#1976d2"
+	case "DEFAULT":
+		return "#fbc02d"
 	default:
 		return "#757575"
 	}

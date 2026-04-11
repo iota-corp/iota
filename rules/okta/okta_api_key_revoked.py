@@ -1,7 +1,7 @@
 """
 Detect API key revocation in Okta.
 
-Ported from Panther: RuleID Okta.APIKeyRevoked
+Source RuleID (upstream): Okta.APIKeyRevoked
 """
 
 import sys

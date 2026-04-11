@@ -1,7 +1,7 @@
 """
 Detect cleartext user passwords extracted via SCIM app (credential theft).
 
-Ported from Panther: RuleID Okta.Password.Extraction.via.SCIM
+Source RuleID (upstream): Okta.Password.Extraction.via.SCIM
 """
 
 import sys

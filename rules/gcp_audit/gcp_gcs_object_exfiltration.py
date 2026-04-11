@@ -1,0 +1,131 @@
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "helpers"))
+from iota_helpers import deep_get
+
+
+def _parse_destination(destination):
+    """Parse bucket and project from destination path.
+
+    Returns tuple: (dest_bucket, dest_project)
+    destination format: projects/PROJECT_ID/buckets/BUCKET_NAME/objects/...
+    """
+    dest_bucket = None
+    dest_project = None
+
+    if "buckets/" in destination and "objects/" in destination:
+        try:
+            dest_bucket = destination.split("buckets/")[1].split("/objects/")[0]
+        except (IndexError, AttributeError):
+            pass
+
+    if "projects/" in destination and "buckets/" in destination:
+        try:
+            project = destination.split("projects/")[1].split("/buckets/")[0]
+            dest_project = project if project != "_" else None
+        except (IndexError, AttributeError):
+            pass
+
+    return dest_bucket, dest_project
+
+
+def rule(event):
+    if (
+        deep_get(event, "protoPayload", "methodName") != "storage.objects.get"
+        or deep_get(event, "protoPayload", "serviceName") != "storage.googleapis.com"
+        or event.get("severity") == "ERROR"  # Operation failed
+        or not deep_get(event, "protoPayload", "metadata", "destination")
+    ):
+        return False
+
+    # Extract source and destination buckets and projects
+    source_bucket = deep_get(event, "resource", "labels", "bucket_name")
+    source_project = deep_get(event, "resource", "labels", "project_id")
+    destination = deep_get(event, "protoPayload", "metadata", "destination", default="")
+
+    dest_bucket, dest_project = _parse_destination(destination)
+
+    # Validate required fields
+    if not all([source_bucket, dest_bucket, source_project, dest_project]):
+        return False
+
+    # Only alert on cross-project copies (more suspicious than same-project copies)
+    is_different_bucket = source_bucket != dest_bucket
+    is_cross_project = dest_project != source_project
+
+    return is_different_bucket and is_cross_project
+
+
+def severity(event):
+    """Dynamic severity based on whether destination is in a different project."""
+    source_project = deep_get(event, "resource", "labels", "project_id")
+    destination = deep_get(event, "protoPayload", "metadata", "destination", default="")
+    _, dest_project = _parse_destination(destination)
+
+    if dest_project and source_project and dest_project != source_project:
+        return "DEFAULT"
+
+    return "LOW"
+
+
+def title(event):
+    source_bucket = deep_get(
+        event, "resource", "labels", "bucket_name", default="Unknown"
+    )
+    source_project = deep_get(
+        event, "resource", "labels", "project_id", default="Unknown"
+    )
+    destination = deep_get(event, "protoPayload", "metadata", "destination", default="")
+
+    dest_bucket, dest_project = _parse_destination(destination)
+    if not dest_bucket:
+        dest_bucket = "Unknown"
+
+    actor = deep_get(
+        event, "protoPayload", "authenticationInfo", "principalEmail", default="Unknown"
+    )
+
+    # Different title based on cross-project vs same-project
+    if dest_project and source_project != "Unknown" and dest_project != source_project:
+        return (
+            f"CROSS-PROJECT: GCS object copied from "
+            f"[{source_project}/{source_bucket}] to "
+            f"[{dest_project}/{dest_bucket}] by [{actor}]"
+        )
+
+    return (
+        f"GCS object copied from bucket "
+        f"[{source_bucket}] to [{dest_bucket}] "
+        f"by [{actor}]"
+    )
+
+
+def alert_context(event):
+    destination = deep_get(event, "protoPayload", "metadata", "destination", default="")
+    dest_bucket, dest_project = _parse_destination(destination)
+
+    source_project = deep_get(event, "resource", "labels", "project_id")
+    is_cross_project = (
+        dest_project and source_project and dest_project != source_project
+    )
+
+    return {
+        "principal": deep_get(
+            event, "protoPayload", "authenticationInfo", "principalEmail"
+        ),
+        "source_project": source_project,
+        "source_bucket": deep_get(event, "resource", "labels", "bucket_name"),
+        "destination_project": dest_project,
+        "destination_bucket": dest_bucket,
+        "is_cross_project": is_cross_project,
+        "destination_path": destination,
+        "source_object": deep_get(event, "protoPayload", "resourceName"),
+        "source_ip": deep_get(event, "protoPayload", "requestMetadata", "callerIp"),
+        "user_agent": deep_get(
+            event, "protoPayload", "requestMetadata", "callerSuppliedUserAgent"
+        ),
+        "bytes_requested": deep_get(
+            event, "protoPayload", "metadata", "requested_bytes"
+        ),
+    }

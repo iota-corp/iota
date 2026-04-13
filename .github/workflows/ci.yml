@@ -42,7 +42,8 @@ jobs:
         run: go mod download
 
       - name: Install CGO build dependencies
-        run: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev
+        # go-duckdb links with -lstdc++ (g++ metapackage on Debian/Ubuntu).
+        run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 
       - name: Run unit tests
         env:
@@ -79,7 +80,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install CGO build dependencies
-        run: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev
+        run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 
       - name: Build binary
         env:

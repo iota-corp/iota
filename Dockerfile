@@ -37,18 +37,15 @@ RUN CGO_ENABLED=1 go build -o iota ./cmd/iota
 
 FROM debian:bookworm-slim
 
+# Slim has no CA store until ca-certificates is installed; apt over HTTPS would fail before that.
+# Use default HTTP mirrors here (CI uses network: host). Builder stage uses HTTPS (full golang image has CAs).
 # hadolint ignore=DL3008
 RUN --mount=type=cache,target=/var/cache/apt,id=apt-arch-runtime \
     --mount=type=cache,target=/var/lib/apt/lists,id=apt-lists-runtime \
     set -eux; \
-    for f in /etc/apt/sources.list /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do \
-      [ -f "$f" ] || continue; \
-      sed -i 's|http://deb.debian.org|https://deb.debian.org|g; s|http://security.debian.org|https://security.debian.org|g' "$f"; \
-    done; \
     printf '%s\n' \
       'Acquire::ForceIPv4 "true";' \
       'Acquire::Retries "5";' \
-      'Acquire::https::Verify-Peer "true";' \
       >/etc/apt/apt.conf.d/99docker-ci; \
     apt-get update -o APT::Update::Error-Mode=any; \
     apt-get install -y --no-install-recommends \

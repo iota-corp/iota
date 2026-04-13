@@ -75,6 +75,9 @@ func sqsReceiveConfigFromEnv() (maxMessages, waitTime int32) {
 
 func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
 	log.Printf("starting SQS processor: queue=%s", queueURL)
+	if latencyTraceEnabled() {
+		log.Print("IOTA_LATENCY_TRACE is enabled: emitting latency_trace log lines (grep for 'latency_trace')")
+	}
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
 	if err != nil {
@@ -140,7 +143,9 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		defer func() { _ = dataLakeWriter.Flush(ctx) }()
 	}
 
-	handler := func(ctx context.Context, bucket, key string) error {
+	handler := func(ctx context.Context, bucket, key string, sqsMeta events.MessageMetadata) error {
+		handlerStart := time.Now().UTC()
+
 		op, ctx := telemetry.StartOperation(ctx, "process_s3_object",
 			attribute.String("s3.bucket", bucket),
 			attribute.String("s3.key", key),
@@ -166,6 +171,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			log.Printf("skipping already processed s3 object: s3://%s/%s", bucket, key)
 			metrics.RecordS3ObjectDownloaded("skipped", 0)
 			op.SetAttributes(attribute.Bool("skipped", true))
+			maybeLogLatencyTrace(bucket, key, sqsMeta, nil, handlerStart, nil, "skipped_duplicate")
 			op.End(nil)
 			return nil
 		}
@@ -183,6 +189,12 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			metrics.RecordProcessingError("s3", "get_object")
 			op.End(err)
 			return fmt.Errorf("get object: %w", err)
+		}
+
+		var s3LastModified *time.Time
+		if result.LastModified != nil {
+			t := result.LastModified.UTC()
+			s3LastModified = &t
 		}
 
 		var downloadedBytes int64
@@ -233,6 +245,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 					log.Printf("warning: failed to update state: %v", err)
 				}
 			}
+			maybeLogLatencyTrace(bucket, key, sqsMeta, s3LastModified, handlerStart, batch, "parsed_empty")
 			op.End(nil)
 			return nil
 		}
@@ -273,6 +286,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		}
 
 		log.Printf("processed %d events, %d matches", len(batch), len(matches))
+		maybeLogLatencyTrace(bucket, key, sqsMeta, s3LastModified, handlerStart, batch, "ok")
 		op.End(nil)
 		return nil
 	}
@@ -288,4 +302,55 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 
 	log.Println("SQS processor started, press ctrl+c to stop")
 	return sqsProcessor.Process(ctx)
+}
+
+func latencyTraceEnabled() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("IOTA_LATENCY_TRACE")))
+	return v == "1" || v == "true" || v == "yes"
+}
+
+func formatTimePtr(t *time.Time) string {
+	if t == nil {
+		return "-"
+	}
+	return t.UTC().Format(time.RFC3339Nano)
+}
+
+// maybeLogLatencyTrace logs one line with S3 LastModified, SQS system attributes, and CloudTrail
+// eventTime range when IOTA_LATENCY_TRACE is set. Used to split delay into AWS delivery vs iota work.
+func maybeLogLatencyTrace(bucket, key string, sqsMeta events.MessageMetadata, s3LastModified *time.Time, handlerStart time.Time, batch []*cloudtrail.Event, stage string) {
+	if !latencyTraceEnabled() {
+		return
+	}
+	done := time.Now().UTC()
+	evMin, evMax := "-", "-"
+	if len(batch) > 0 {
+		minT := batch[0].EventTime
+		maxT := batch[0].EventTime
+		for _, e := range batch[1:] {
+			if e.EventTime.Before(minT) {
+				minT = e.EventTime
+			}
+			if e.EventTime.After(maxT) {
+				maxT = e.EventTime
+			}
+		}
+		evMin = minT.UTC().Format(time.RFC3339Nano)
+		evMax = maxT.UTC().Format(time.RFC3339Nano)
+	}
+	log.Printf(
+		"latency_trace stage=%s s3_uri=s3://%s/%s s3_last_modified=%s sqs_message_id=%s sqs_sent_timestamp=%s sqs_approx_first_receive_timestamp=%s sqs_receive_count=%d event_time_min=%s event_time_max=%s iota_handler_start=%s iota_handler_done=%s iota_handler_seconds=%.3f",
+		stage,
+		bucket, key,
+		formatTimePtr(s3LastModified),
+		sqsMeta.MessageID,
+		formatTimePtr(sqsMeta.SentTimestamp),
+		formatTimePtr(sqsMeta.ApproximateFirstReceiveTimestamp),
+		sqsMeta.ApproximateReceiveCount,
+		evMin,
+		evMax,
+		handlerStart.Format(time.RFC3339Nano),
+		done.Format(time.RFC3339Nano),
+		done.Sub(handlerStart).Seconds(),
+	)
 }

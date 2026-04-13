@@ -61,23 +61,18 @@ repos:
       - id: ruff-format
         types_or: [python, pyi]
 
-  # Go-specific hooks
-  # Force a valid absolute GOPATH: some shells store GOPATH as the literal "$HOME/go",
-  # which breaks `go` when pre-commit runs without expansion. Module cache uses this path.
+  # Go-specific hooks (turo)
+  # Do not set GOPATH/GOMODCACHE here: a separate cache under /tmp diverged from the
+  # official golangci-lint hook's typecheck (missing modules / wrong GOMODCACHE). Using the
+  # default module cache keeps go-mod-tidy, go-build, go-test, and golangci-lint consistent.
   - repo: https://github.com/turo/pre-commit-hooks
     rev: v4.0.0
     hooks:
       - id: go-mod-tidy
         fail_fast: true
-        env:
-          GOPATH: /tmp/iota-precommit-gopath
       - id: go-build
         fail_fast: true
-        env:
-          GOPATH: /tmp/iota-precommit-gopath
       - id: go-test-unit
-        env:
-          GOPATH: /tmp/iota-precommit-gopath
       - id: docker-compose-lint
 
   # Dockerfile lint (system binary — install: brew install hadolint)
@@ -86,13 +81,13 @@ repos:
     hooks:
       - id: hadolint
 
-  # Official golangci-lint hook (GOPATH via entry — hook manifest does not allow `env:`)
+  # golangci-lint (installs its own binary via pre-commit; no system golangci-lint required)
   - repo: https://github.com/golangci/golangci-lint
     rev: v2.11.4
     hooks:
       - id: golangci-lint
         fail_fast: true
-        entry: env GOPATH=/tmp/iota-precommit-gopath golangci-lint run --new-from-rev HEAD --fix
+        args: [--new-from-rev, HEAD, --fix]
 
   # Terraform/HCL-specific hooks
   - repo: https://github.com/antonbabenko/pre-commit-terraform

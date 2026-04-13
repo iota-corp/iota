@@ -14,14 +14,14 @@ import (
 type SQSProcessor struct {
 	client      *sqs.Client
 	queueURL    string
-	handler     func(ctx context.Context, s3Bucket, s3Key string) error
+	handler     func(ctx context.Context, s3Bucket, s3Key string, sqsMeta MessageMetadata) error
 	maxMessages int32
 	waitTime    int32
 }
 
 type Config struct {
 	QueueURL    string
-	Handler     func(ctx context.Context, s3Bucket, s3Key string) error
+	Handler     func(ctx context.Context, s3Bucket, s3Key string, sqsMeta MessageMetadata) error
 	MaxMessages int32
 	WaitTime    int32
 }
@@ -58,6 +58,11 @@ func (p *SQSProcessor) Process(ctx context.Context) error {
 			MaxNumberOfMessages: p.maxMessages,
 			WaitTimeSeconds:     p.waitTime,
 			VisibilityTimeout:   int32(300),
+			MessageSystemAttributeNames: []types.MessageSystemAttributeName{
+				types.MessageSystemAttributeNameSentTimestamp,
+				types.MessageSystemAttributeNameApproximateFirstReceiveTimestamp,
+				types.MessageSystemAttributeNameApproximateReceiveCount,
+			},
 		})
 		if err != nil {
 			return fmt.Errorf("receive message: %w", err)
@@ -96,8 +101,9 @@ func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message
 		return err
 	}
 
+	meta := ParseMessageSystemAttributes(message)
 	for _, obj := range objects {
-		if err := p.handler(ctx, obj.Bucket, obj.Key); err != nil {
+		if err := p.handler(ctx, obj.Bucket, obj.Key, meta); err != nil {
 			return fmt.Errorf("handle s3 object %s/%s: %w", obj.Bucket, obj.Key, err)
 		}
 	}

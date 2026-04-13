@@ -24,6 +24,10 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 - [ ] **`DATA_LAKE_BUCKET`** set in **`iota-deployments`** so **`--data-lake-bucket`** is non-empty and iota writes **`logs/.../*.json.gz`**. Without it, **`iota query`** has no lake objects (only CloudTrail in AWS helps).
 - [ ] **IAM:** **`s3:PutObject`** (and list/get as needed) on that bucket for the workload identity.
 
+## Latency profiling (S3 vs SQS vs iota)
+
+- [x] **`IOTA_LATENCY_TRACE`**: Set to `true` / `1` / `yes` on the iota workload. Logs one `latency_trace` line per S3 object with **`s3_last_modified`**, **SQS `SentTimestamp` / `ApproximateFirstReceiveTimestamp` / receive count**, **min/max CloudTrail `eventTime`** in the batch, and **handler wall time**. Compare to manual **`aws s3api head-object`** via **`scripts/aws-latency-correlation.sh`**.
+
 ## Observability
 
 - [x] **Logs**: Each match logs a line

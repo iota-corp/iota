@@ -80,11 +80,11 @@ jobs:
           git push origin "${TAG}"
 
   # --- Binaries (parallel with Docker) ---
-  # Stay on GitHub-hosted: native linux/arm64 job needs a real ARM runner for CGO (Beelink is amd64-only).
+  # linux/amd64: GitHub-hosted. linux/arm64: ARC (homelab) — native CGO; Beelink is amd64-only.
   build-binary:
     name: Build binary (${{ matrix.suffix }})
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: ${{ matrix.runner }}
+    runs-on: ${{ matrix.runs_on == 'ubuntu-latest' && 'ubuntu-latest' || fromJSON(matrix.runs_on) }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
       CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
@@ -92,9 +92,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-latest
+          - runs_on: ubuntu-latest
             suffix: linux-amd64
-          - runner: ubuntu-24.04-arm
+          - runs_on: '["self-hosted","homelab-arc-arm","Linux","ARM64"]'
             suffix: linux-arm64
 
     steps:
@@ -118,7 +118,7 @@ jobs:
           path: iota-${{ matrix.suffix }}
 
   # --- linux/amd64 only: avoids QEMU arm64 builds on the self-hosted x64 runner (heavy CPU).
-  #    Release binaries for arm64 remain in build-binary (native ubuntu-24.04-arm) if needed.
+  #    linux/arm64 release binary is built natively on ARC (build-binary matrix).
   docker-publish:
     name: Docker push (linux/amd64)
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}

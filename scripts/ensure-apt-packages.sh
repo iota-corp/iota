@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install Debian packages via apt when passwordless sudo is available (GitHub-hosted
 # runners); otherwise verify packages are already installed (typical self-hosted).
-# Usage: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev
+# Usage: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 set -euo pipefail
 
 if [[ $# -lt 1 ]]; then

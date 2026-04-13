@@ -1,7 +1,8 @@
 name: CI
 
 # Fork PRs use ubuntu-latest so untrusted code never runs on self-hosted runners.
-# Same-repo PRs and all pushes use the org runner (beelink).
+# Same-repo PRs and pushes use ARC on the spare Mac (homelab-arc-arm); beelink remains for
+# release workflows and smoke matrix until you retire it.
 
 on:
   push:
@@ -9,10 +10,14 @@ on:
   pull_request:
     branches: [main, develop]
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     name: Test
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","homelab-arc-arm","Linux","ARM64"]') }}
     env:
       # Outside $GITHUB_WORKSPACE so actions/checkout can wipe the clone; smoke.sh defaults would use repo-local caches.
       GOMODCACHE: ${{ github.workspace }}/../.gomodcache
@@ -29,15 +34,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ github.workspace }}/../.gomodcache
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-
+            ${{ runner.os }}-${{ runner.arch }}-go-
 
       - name: Install dependencies
         run: go mod download
 
       - name: Install CGO build dependencies
-        run: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev
+        # go-duckdb links with -lstdc++ (g++ metapackage on Debian/Ubuntu).
+        run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 
       - name: Run unit tests
         env:
@@ -60,7 +66,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","homelab-arc-arm","Linux","ARM64"]') }}
     needs: test
     env:
       GOMODCACHE: ${{ github.workspace }}/../.gomodcache
@@ -74,7 +80,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install CGO build dependencies
-        run: ./scripts/ensure-apt-packages.sh gcc libc6-dev libsqlite3-dev
+        run: ./scripts/ensure-apt-packages.sh gcc g++ libc6-dev libsqlite3-dev
 
       - name: Build binary
         env:
@@ -90,7 +96,7 @@ jobs:
 
   docker-build:
     name: Docker Build
-    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","beelink"]') }}
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || fromJSON('["self-hosted","homelab-arc-arm","Linux","ARM64"]') }}
     needs: test
     env:
       GOMODCACHE: ${{ github.workspace }}/../.gomodcache
@@ -108,11 +114,14 @@ jobs:
           # Use engine BuildKit instead of pulling moby/buildkit:buildx-stable-1 (often hits bad auth).
           driver: docker
 
-      # GHA cache-to type=gha requires the docker-container driver; we use `driver: docker` (see above).
+      # GHA cache: persist BuildKit layers between CI runs. host network avoids bridge/MTU issues to debian mirrors in DinD.
       - name: Build Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: false
           load: true
+          network: host
           tags: iota:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

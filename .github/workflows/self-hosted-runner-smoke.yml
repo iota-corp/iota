@@ -1,8 +1,9 @@
-# Manual check that an org (or repo) self-hosted runner is online and labeled correctly.
+# Manual check that org self-hosted runners are online and labeled correctly.
 # Actions → Self-hosted runner smoke → Run workflow.
-# Expected runner labels: self-hosted, beelink (see scripts/install-github-actions-runner.sh).
 #
-# Switching CI jobs to self-hosted comes after this workflow is green.
+# Pools:
+#   - beelink: self-hosted, beelink (x64 Linux on homelab)
+#   - homelab-arc-arm: self-hosted, homelab-arc-arm, Linux, ARM64 (ARC on k3d / spare Mac)
 
 name: Self-hosted runner smoke
 
@@ -14,8 +15,16 @@ permissions:
 
 jobs:
   verify:
-    name: Verify runner
-    runs-on: [self-hosted, beelink]
+    name: Verify (${{ matrix.pool }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pool: beelink
+            runs_on: '["self-hosted","beelink"]'
+          - pool: homelab-arc-arm
+            runs_on: '["self-hosted","homelab-arc-arm","Linux","ARM64"]'
+    runs-on: ${{ fromJSON(matrix.runs_on) }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +34,10 @@ jobs:
           echo "RUNNER_NAME=$RUNNER_NAME"
           echo "RUNNER_OS=$RUNNER_OS"
 
+      - name: Docker (ARC pool has DinD sidecar)
+        if: matrix.pool == 'homelab-arc-arm'
+        run: docker version
+
       - name: Toolchain probe (optional during bring-up)
         run: |
-          command -v go >/dev/null 2>&1 && go version || echo "go: not installed yet (OK for first boot)"
+          command -v go >/dev/null 2>&1 && go version || echo "go: not installed yet (OK for smoke)"

@@ -1,4 +1,7 @@
 self-hosted-runner:
   labels:
-    - beelink
     - self-hosted
+    - beelink
+    - homelab-arc-arm
+    - Linux
+    - ARM64

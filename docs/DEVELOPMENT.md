@@ -46,11 +46,28 @@ Capabilities today include **`log-processing`**, **`detection-engine`**, **`aler
 
 ## 3. Branches, PRs, and merging
 
-- **Default integration branches:** **`main`** and **`develop`** (CI runs on both; see `.github/workflows/ci.yml`). Use **conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`) so release tooling and release notes stay coherent (see [breaking-changes.md](breaking-changes.md)).
-- **Branch naming:** `feature/<topic>`, `fix/<topic>`, or include the OpenSpec change id when applicable (`feature/add-azure-audit-parser`).
-- **Pull requests:** Prefer **small, reviewable PRs** with a clear description linking an OpenSpec change when one exists. Rebase or merge from **`develop`** / **`main`** as your team agrees; avoid force-pushing shared branches; use `--force-with-lease` only on your feature branch if you must rewrite history.
-- **Before merge:** `go test ./...` and **`./scripts/smoke.sh`** (or **`make ci-local`**) locally; CI must be green. Fork PRs run on GitHub-hosted runners; same-repo PRs use the org’s self-hosted labels—see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if CI env differs.
-- **Docs and breaking changes:** Anything that affects operators or detection contracts should be reflected in **`docs/breaking-changes.md`** or the relevant spec when applicable.
+**Integration branches**
+
+- **`main`** — Release line. Merges here can trigger the next **`v*.*.*`** tag and **[`.github/workflows/release.yml`](../.github/workflows/release.yml)** (Docker **`bilals12/iota`** with semver tags, **`latest`**, and optional **iota-deployments** bumps for overlays that track releases). Tagging is driven by **`scripts/next-release-version.sh`** and conventional history—not every push to **`main`** necessarily cuts a release.
+- **`develop`** — Long-lived branch for work that should land in the repo *before* it is release-ready: OpenSpec-only PRs (**`proposal.md`**, **`tasks.md`**, **`design.md`**), docs, and stacked feature work. **Open PRs against `develop`** when the change should not go straight to a tagged release (for example, Azure design plumbing before implementation).
+
+**Workflow**
+
+- **Branch names:** `feature/<topic>`, `fix/<topic>`, or include the OpenSpec change id (`feature/add-azure-audit-parser`). Branch from **`develop`** for normal work; branch from **`main`** only when you need a hotfix or your team agrees to skip **`develop`**.
+- **Pull requests:** Prefer **small, reviewable PRs** with a clear description linking an OpenSpec change when one exists. Rebase or merge from **`develop`** / **`main`** as your team agrees; avoid force-pushing shared branches; use **`--force-with-lease`** only on your feature branch if you must rewrite history.
+- **Merging `develop` → `main`:** When a body of work is ready to ship, merge **`develop`** into **`main`** (or merge individual PRs to **`main`** if you use **`develop`** only as a staging area—pick one rhythm and stick to it).
+- **Bootstrapping `develop` (iota):** The **`develop`** branch must exist on the remote for integration PRs and for **`.github/workflows/docker-develop.yml`**. If it does not exist yet: `git checkout main && git pull && git checkout -b develop && git push -u origin develop`, then set the default PR base in GitHub for contributor work as needed.
+
+**Conventions:** Use **conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`) so release tooling and release notes stay coherent (see [breaking-changes.md](breaking-changes.md)).
+
+**Before merge:** `go test ./...` and **`./scripts/smoke.sh`** (or **`make ci-local`**) locally; CI must be green. Fork PRs run on GitHub-hosted runners; same-repo PRs use the org’s self-hosted labels—see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if CI env differs.
+
+**Docs and breaking changes:** Anything that affects operators or detection contracts should be reflected in **`docs/breaking-changes.md`** or the relevant spec when applicable.
+
+**Pre-release Docker images (test clusters)**
+
+- Every push to **`develop`** runs **[`.github/workflows/docker-develop.yml`](../.github/workflows/docker-develop.yml)** on the **`homelab-arc-arm`** runner and pushes **`bilals12/iota:sha-<7>`** (immutable; matches that **iota** commit) plus **`bilals12/iota:develop`** (floating; useful for manual **`docker pull`**, not for GitOps).
+- **iota-deployments:** Argo CD apps **`iota-homelab-test`** / **`iota-homelab-k3s-audit`** track branch **`develop`** in that repo. Commit **`newTag: sha-<7>`** there so the cluster runs a known image; see **iota-deployments** **`docs/git-branches.md`**. Release images and prod/lab bumps in **iota-deployments** **`main`** stay on **`v*.*.*`** via **`release.yml`** (see §8).
 
 ---
 
@@ -176,7 +193,7 @@ Use **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** 
 
 ## 8. Kubernetes and GitOps (`iota-deployments`)
 
-The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab-prod`**, **`clusters/homelab-test`**, **`clusters/eks-lab`**). **homelab-test** uses ad-hoc image tags (default **`dev`**), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/homelab-k3s.md`** (Test: ad-hoc dev images).
+The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/base`**. Day-to-day cluster-specific values (image tag, queue URL, bucket, region, optional data lake) live in the separate **`iota-deployments`** repo (overlays such as **`clusters/homelab-prod`**, **`clusters/homelab-test`**, **`clusters/eks-lab`**). **homelab-test** / **homelab-k3s-audit** use **pinned** **`sha-<7>`** tags on **iota-deployments** branch **`develop`** (Argo), not release **`v*.*.*`** bumps — see **`iota-deployments/docs/git-branches.md`** and **`homelab-k3s.md`** (Test: dev images).
 
 **Homelab (k3s on Beelink, Tailscale):**
 
@@ -229,6 +246,7 @@ The **`iota`** repo ships **base manifests** under **`deployments/kubernetes/bas
 | [breaking-changes.md](breaking-changes.md) | Releases and API expectations. |
 | [TESTING.md](../TESTING.md) | CLI examples, gunzip pipes, integration tests. |
 | `iota-deployments/docs/homelab-k3s.md` | Homelab k3s, Tailscale, Argo, Grafana/Ingress. |
+| `iota-deployments/docs/git-branches.md` | **`main`** vs **`develop`**, Argo **`targetRevision`**, pinned **`sha-*`** test images. |
 | `iota-deployments/README.md` | How **iota** / **iota-deployments** / **iota-infra** relate. |
 
 ---

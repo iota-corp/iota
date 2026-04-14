@@ -22,6 +22,7 @@ import (
 	"github.com/bilals12/iota/internal/telemetry"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
@@ -87,9 +88,11 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 
 	handler := func(ctx context.Context, eventJSON []byte, logType string, envelope *events.EventBridgeEnvelope) error {
 		spanAttrs := []attribute.KeyValue{
+			attribute.String("iota.pipeline.mode", "eventbridge"),
 			attribute.String("log_type", logType),
 			attribute.Int("event_json_size", len(eventJSON)),
 		}
+		spanAttrs = append(spanAttrs, spanAttrsSQSMessage(queueURL, events.MessageMetadata{})...)
 		if envelope != nil {
 			spanAttrs = append(spanAttrs,
 				attribute.String("eventbridge.source", envelope.Source),
@@ -130,9 +133,13 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 			return nil
 		}
 
-		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze")
-		analyzeSpan.SetAttributes(attribute.Int("events.count", len(allEvents)))
+		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze",
+			trace.WithAttributes(attribute.Int("events.count", len(allEvents))),
+		)
 		matches, err := eng.Analyze(analyzeCtx, allEvents)
+		if err != nil {
+			telemetry.RecordError(analyzeCtx, err)
+		}
 		analyzeSpan.End()
 		if err != nil {
 			op.End(err)

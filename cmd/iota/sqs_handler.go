@@ -30,6 +30,7 @@ import (
 	"github.com/bilals12/iota/internal/telemetry"
 	"github.com/bilals12/iota/pkg/cloudtrail"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // openS3ObjectBody returns a reader for log parsing. Uses gzip when the key ends with .gz
@@ -146,10 +147,13 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	handler := func(ctx context.Context, bucket, key string, sqsMeta events.MessageMetadata) error {
 		handlerStart := time.Now().UTC()
 
-		op, ctx := telemetry.StartOperation(ctx, "process_s3_object",
+		rootAttrs := []attribute.KeyValue{
+			attribute.String("iota.pipeline.mode", "sqs"),
 			attribute.String("s3.bucket", bucket),
 			attribute.String("s3.key", key),
-		)
+		}
+		rootAttrs = append(rootAttrs, spanAttrsSQSMessage(queueURL, sqsMeta)...)
+		op, ctx := telemetry.StartOperation(ctx, "process_s3_object", rootAttrs...)
 
 		accountID, eventRegion, err := events.ExtractAccountRegionFromKey(key)
 		if err != nil {
@@ -178,18 +182,28 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 
 		log.Printf("processing s3 object: s3://%s/%s", bucket, key)
 
-		downloadCtx, downloadSpan := telemetry.StartSpan(ctx, "s3.GetObject")
+		downloadCtx, downloadSpan := telemetry.StartSpan(ctx, "s3.GetObject",
+			trace.WithAttributes(
+				attribute.String("s3.bucket", bucket),
+				attribute.String("s3.key", key),
+			),
+		)
 		result, err := s3Client.GetObject(downloadCtx, &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(key),
 		})
-		downloadSpan.End()
 		if err != nil {
+			telemetry.RecordError(downloadCtx, err)
+			downloadSpan.End()
 			metrics.RecordS3ObjectDownloaded("failure", 0)
 			metrics.RecordProcessingError("s3", "get_object")
 			op.End(err)
 			return fmt.Errorf("get object: %w", err)
 		}
+		if result.ContentLength != nil {
+			downloadSpan.SetAttributes(attribute.Int64("s3.object.size_bytes", *result.ContentLength))
+		}
+		downloadSpan.End()
 
 		var s3LastModified *time.Time
 		if result.LastModified != nil {
@@ -212,7 +226,12 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		defer closeBody()
 
 		procStart := time.Now()
-		processCtx, processSpan := telemetry.StartSpan(ctx, "logprocessor.Process")
+		processCtx, processSpan := telemetry.StartSpan(ctx, "logprocessor.Process",
+			trace.WithAttributes(
+				attribute.String("s3.bucket", bucket),
+				attribute.String("s3.key", key),
+			),
+		)
 		processedEvents, errs := processor.Process(processCtx, procReader)
 
 		var batch []*cloudtrail.Event
@@ -230,11 +249,13 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 		}
 
 		if err := <-errs; err != nil {
+			telemetry.RecordError(processCtx, err)
 			processSpan.End()
 			metrics.RecordProcessingError("logprocessor", "parse")
 			op.End(err)
 			return fmt.Errorf("process events: %w", err)
 		}
+		processSpan.SetAttributes(attribute.Int("events.count", len(batch)))
 		processSpan.End()
 
 		op.SetAttributes(attribute.Int("events.count", len(batch)))
@@ -250,9 +271,17 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			return nil
 		}
 
-		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze")
-		analyzeSpan.SetAttributes(attribute.Int("events.count", len(batch)))
+		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze",
+			trace.WithAttributes(
+				attribute.String("s3.bucket", bucket),
+				attribute.String("s3.key", key),
+				attribute.Int("events.count", len(batch)),
+			),
+		)
 		matches, err := eng.Analyze(analyzeCtx, batch)
+		if err != nil {
+			telemetry.RecordError(analyzeCtx, err)
+		}
 		analyzeSpan.End()
 		if err != nil {
 			metrics.RecordProcessingError("engine", "analyze")

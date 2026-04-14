@@ -1,0 +1,19 @@
+{
+  "Records": [
+    {
+      "eventVersion": "2.1",
+      "eventSource": "aws:s3",
+      "awsRegion": "us-east-1",
+      "eventTime": "2026-04-02T19:35:00.000Z",
+      "eventName": "ObjectCreated:Put",
+      "s3": {
+        "bucket": {
+          "name": "direct-cloudtrail-bucket"
+        },
+        "object": {
+          "key": "AWSLogs/111122223333/CloudTrail/us-east-1/2026/04/02/direct_key.json.gz"
+        }
+      }
+    }
+  ]
+}

@@ -11,6 +11,24 @@ import (
 func TestParseS3Notification(t *testing.T) {
 	t.Parallel()
 
+	t.Run("direct_S3_ObjectCreated_Put_top_level_Records", func(t *testing.T) {
+		body := mustReadTestdata(t, "direct_s3_object_created_put.json")
+		objs, err := ParseS3Notification(body)
+		if err != nil {
+			t.Fatalf("ParseS3Notification: %v", err)
+		}
+		if len(objs) != 1 {
+			t.Fatalf("len(objects) = %d, want 1", len(objs))
+		}
+		if got, want := objs[0].Bucket, "direct-cloudtrail-bucket"; got != want {
+			t.Errorf("Bucket = %q, want %q", got, want)
+		}
+		wantKey := "AWSLogs/111122223333/CloudTrail/us-east-1/2026/04/02/direct_key.json.gz"
+		if got := objs[0].Key; got != wantKey {
+			t.Errorf("Key = %q, want %q", got, wantKey)
+		}
+	})
+
 	t.Run("ObjectCreated_Put_realistic_fixture", func(t *testing.T) {
 		body := mustReadTestdata(t, "sns_envelope_object_created_put.json")
 		objs, err := ParseS3Notification(body)

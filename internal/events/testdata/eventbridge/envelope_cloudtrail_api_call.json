@@ -1,0 +1,37 @@
+{
+  "version": "0",
+  "id": "eb-evt-001",
+  "detail-type": "AWS API Call via CloudTrail",
+  "source": "aws.cloudtrail",
+  "account": "111122223333",
+  "time": "2026-04-13T15:30:00Z",
+  "region": "us-east-1",
+  "resources": [],
+  "detail": {
+    "eventVersion": "1.11",
+    "userIdentity": {
+      "type": "IAMUser",
+      "principalId": "AIDACKCEVSQ6C2EXAMPLE",
+      "arn": "arn:aws:iam::111122223333:user/Alice",
+      "accountId": "111122223333",
+      "accessKeyId": "EXAMPLEKEY",
+      "userName": "Alice"
+    },
+    "eventTime": "2026-04-13T15:29:59Z",
+    "eventSource": "iam.amazonaws.com",
+    "eventName": "CreateUser",
+    "awsRegion": "us-east-1",
+    "sourceIPAddress": "192.0.2.1",
+    "userAgent": "aws-cli/2.0",
+    "requestParameters": {
+      "userName": "bob"
+    },
+    "responseElements": null,
+    "requestID": "req-001",
+    "eventID": "a1b2c3d4-1111-2222-3333-444455556666",
+    "readOnly": false,
+    "eventType": "AwsApiCall",
+    "managementEvent": true,
+    "recipientAccountId": "111122223333"
+  }
+}

@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -68,5 +69,22 @@ func DetectEventSource(envelope *EventBridgeEnvelope) string {
 		return "GSuite.Reports"
 	}
 
+	// Native AWS CloudTrail on EventBridge: detail is one API call record (same JSON shape as
+	// a single element of an S3 log file's Records array). Source is typically aws.cloudtrail;
+	// detail-type values include "AWS API Call via CloudTrail", "AWS Console Sign In via CloudTrail", etc.
+	if isCloudTrailEventBridge(envelope) {
+		return "AWS.CloudTrail"
+	}
+
 	return ""
+}
+
+func isCloudTrailEventBridge(e *EventBridgeEnvelope) bool {
+	if e.Source == "aws.cloudtrail" {
+		return true
+	}
+	if strings.Contains(e.DetailType, "via CloudTrail") && strings.HasPrefix(e.Source, "aws.") {
+		return true
+	}
+	return false
 }

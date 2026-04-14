@@ -49,18 +49,18 @@ func getParsers() map[string]parsers.ParserInterface {
 		"Slack.AuditLogs":            parsers.NewSlackAuditLogsParser(),
 		"GCP.HTTPLoadBalancer":       parsers.NewGCPHTTPLoadBalancerParser(),
 		"GCP.AuditLog":               parsers.NewGCPAuditLogParser(),
-		"Amazon.EKS.Audit":          parsers.NewEKSAuditParser(),
+		"Amazon.EKS.Audit":           parsers.NewEKSAuditParser(),
 		"AWS.BedrockModelInvocation": parsers.NewBedrockModelInvocationParser(),
 		"GitHub.Audit":               parsers.NewGitHubAuditParser(),
 		"GitHub.Webhook":             parsers.NewGitHubWebhookParser(),
 		"AWS.CloudTrail":             parsers.NewCloudTrailParser(),
 		"AWS.S3ServerAccess":         parsers.NewS3ServerAccessParser(),
-		"AWS.VPCFlow":               parsers.NewVPCFlowParser(),
-		"AWS.ALB":                   parsers.NewALBParser(),
-		"AWS.AuroraMySQLAudit":      parsers.NewAuroraMySQLAuditParser(),
-		"Okta.SystemLog":            parsers.NewOktaParser(),
-		"GSuite.Reports":            parsers.NewGSuiteParser(),
-		"OnePassword.SignInAttempt": parsers.NewOnePasswordParser(),
+		"AWS.VPCFlow":                parsers.NewVPCFlowParser(),
+		"AWS.ALB":                    parsers.NewALBParser(),
+		"AWS.AuroraMySQLAudit":       parsers.NewAuroraMySQLAuditParser(),
+		"Okta.SystemLog":             parsers.NewOktaParser(),
+		"GSuite.Reports":             parsers.NewGSuiteParser(),
+		"OnePassword.SignInAttempt":  parsers.NewOnePasswordParser(),
 	}
 }
 
@@ -196,6 +196,25 @@ func generateRowID(event *cloudtrail.Event) string {
 }
 
 func (p *Processor) ProcessEvent(ctx context.Context, eventJSON []byte, logTypeHint string) ([]*ProcessedEvent, error) {
+	// EventBridge delivers one API call in detail; S3 log files use {"Records":[...]}. Accept the
+	// batched wrapper when we already know the payload is CloudTrail-class.
+	if logTypeHint == "AWS.CloudTrail" {
+		var wrapped struct {
+			Records []json.RawMessage `json:"Records"`
+		}
+		if err := json.Unmarshal(eventJSON, &wrapped); err == nil && len(wrapped.Records) > 0 {
+			var out []*ProcessedEvent
+			for _, rec := range wrapped.Records {
+				part, err := p.ProcessEvent(ctx, rec, logTypeHint)
+				if err != nil {
+					return nil, err
+				}
+				out = append(out, part...)
+			}
+			return out, nil
+		}
+	}
+
 	line := string(eventJSON)
 
 	if logTypeHint != "" {

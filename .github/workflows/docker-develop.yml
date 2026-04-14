@@ -6,6 +6,8 @@
 # (never :develop) so the cluster matches a known iota commit.
 #
 # Runs on self-hosted ARC (homelab-arc-arm); image is still linux/amd64 (EKS/homelab nodes).
+# Cache: registry pull of :develop + inline cache on push (avoids GHA cache-to mode=max uploads,
+# which dominated wall time on homelab uplink). Login before build-push is required for pulls.
 # Release images (semver, latest, iota-deployments bump) remain on release.yml + v*.*.* tags.
 # -----------------------------------------------------------------------------
 
@@ -34,10 +36,6 @@ jobs:
         id: sha
         run: echo "short=$(echo '${{ github.sha }}' | cut -c1-7)" >> "$GITHUB_OUTPUT"
 
-      # Avoid failed pulls of moby/buildkit when ~/.docker has bad docker.io credentials.
-      - name: Log out of Docker Hub (anonymous pull for base images)
-        run: docker logout docker.io 2>/dev/null || true
-
       - uses: docker/setup-buildx-action@v3
         with:
           version: v0.33.0
@@ -57,5 +55,6 @@ jobs:
           tags: |
             bilals12/iota:develop
             bilals12/iota:sha-${{ steps.sha.outputs.short }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # Inline cache rides in the pushed manifest; cache-from reuses prior :develop layers.
+          cache-from: type=registry,ref=bilals12/iota:develop
+          cache-to: type=inline

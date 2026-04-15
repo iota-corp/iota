@@ -5,15 +5,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/bilals12/iota/internal/lakepath"
 )
 
-func TestGetTableName(t *testing.T) {
+func TestTableSlug_LakeAlignment(t *testing.T) {
 	t.Parallel()
-	if got, want := getTableName("AWS.CloudTrail"), "aws_cloudtrail"; got != want {
-		t.Errorf("getTableName(AWS.CloudTrail) = %q, want %q", got, want)
+	if got, want := lakepath.TableSlug("AWS.CloudTrail"), "aws_cloudtrail"; got != want {
+		t.Errorf("TableSlug(AWS.CloudTrail) = %q, want %q", got, want)
 	}
-	if got, want := getTableName("Okta.SystemLog"), "okta_systemlog"; got != want {
-		t.Errorf("getTableName(Okta.SystemLog) = %q, want %q", got, want)
+	if got, want := lakepath.TableSlug("Okta.SystemLog"), "okta_systemlog"; got != want {
+		t.Errorf("TableSlug(Okta.SystemLog) = %q, want %q", got, want)
 	}
 }
 

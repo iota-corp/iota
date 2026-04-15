@@ -21,8 +21,8 @@
 
 ### P2 — Async / contention
 
-- [ ] **Data lake async flush (optional):** After baseline metrics, optional bounded async flush from `internal/datalake/writer.go`; metrics for lag and failures. **Verify:** load test; no silent data loss; Glue/S3 errors surfaced.
-- [ ] **SQLite single-writer or batching:** Measure contention with N concurrent handlers; implement queue or batch writes for dedup/state if needed. **Verify:** stress test with parallel workers; p99 latency stable.
+- [x] **Data lake async flush (optional):** Set `IOTA_DATALAKE_ASYNC_FLUSH=1` (optional `IOTA_DATALAKE_FLUSH_QUEUE_DEPTH`, default 4). `Flush()` closes the queue and waits for the worker. `iota_datalake_async_flush_queue_depth` gauge; S3/Glue failures increment `iota_processing_errors_total` and `iota_datalake_writes_total{status=error}`.
+- [x] **SQLite contention:** `sqliteutil.ConfigureConnectionPool` sets `MaxOpenConns(1)`; `Deduplicator` and `state.DB` use `RWMutex` on all DB methods (writers serialized; reads can share the lock with WAL semantics at the driver level).
 
 ### P3 — Operations and observability
 

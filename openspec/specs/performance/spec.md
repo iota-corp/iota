@@ -105,5 +105,7 @@ When OpenTelemetry tracing is enabled, deployments SHOULD be able to reduce span
 - **Python worker:** `internal/engine/engine.go` runs `engines/iota/engine.py worker` with length-prefixed JSON frames; rules stay loaded until `Engine.Close()` or process error. `IOTA_ENGINE_ONESHOT=1` selects one subprocess per `Analyze`.
 - **Streaming ingest:** `internal/logprocessor/processor.go` streams root JSON arrays and `{"Records":[...]}` when the file prefix matches (see code); other layouts use the prior buffered path.
 - **Line scanner:** Line mode allows up to 10 MiB tokens via `Scanner.Buffer`.
+- **Data lake:** Optional async flush via `IOTA_DATALAKE_ASYNC_FLUSH`; writer mutex protects the buffer; `Flush` drains async work.
+- **SQLite:** `internal/sqliteutil.ConfigureConnectionPool`; `internal/deduplication` and `internal/state` use `RWMutex` around DB access.
 - **Bloom filter:** `internal/bloom/bloom.go` uses `RWMutex` for concurrent readers; no change required for basic concurrency.
 - **Measured baselines:** See `openspec/project.md` (Performance Characteristics) and `docs/PERFORMANCE-ROADMAP.md`.

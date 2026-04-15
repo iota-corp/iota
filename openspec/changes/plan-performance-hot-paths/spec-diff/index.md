@@ -14,3 +14,9 @@ Manual summary for review (regenerate with `/openspec-spec-diff` if the project 
 ## `docs/DEVELOPMENT.md`
 
 - Capabilities list includes **`performance`**; added link to `PERFORMANCE-ROADMAP.md` and `plan-performance-hot-paths`.
+
+## Follow-up (P2 implementation)
+
+- **`openspec/specs/performance/spec.md`:** Current implementation notes for async data lake flush and SQLite pool + mutexes.
+- **`docs/PERFORMANCE-ROADMAP.md`:** Env vars `IOTA_DATALAKE_ASYNC_FLUSH`, queue depth, metrics.
+- **Code:** `internal/datalake/writer.go`, `internal/deduplication/deduplicator.go`, `internal/state/state.go`, `internal/sqliteutil/dsn.go`, `internal/metrics/metrics.go`.

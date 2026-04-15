@@ -91,6 +91,13 @@ var (
 		[]string{"log_type"},
 	)
 
+	DataLakeAsyncFlushQueueDepth = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "iota_datalake_async_flush_queue_depth",
+			Help: "Pending async data lake flush batches (when async flush is enabled)",
+		},
+	)
+
 	ProcessingErrorsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
 			Name: "iota_processing_errors_total",
@@ -154,6 +161,11 @@ func RecordS3ObjectDownloaded(status string, bytes int64) {
 func RecordDataLakeWrite(logType, status string, bytes int64) {
 	DataLakeWritesTotal.WithLabelValues(logType, status).Inc()
 	DataLakeWritesBytes.WithLabelValues(logType).Add(float64(bytes))
+}
+
+// SetDataLakeAsyncFlushQueueDepth records how many batches are waiting in the async flush channel.
+func SetDataLakeAsyncFlushQueueDepth(n int) {
+	DataLakeAsyncFlushQueueDepth.Set(float64(n))
 }
 
 func RecordProcessingError(component, errorType string) {

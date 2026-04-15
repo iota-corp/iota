@@ -1,6 +1,11 @@
 package sqliteutil
 
-import "testing"
+import (
+	"database/sql"
+	"testing"
+
+	_ "github.com/mattn/go-sqlite3"
+)
 
 func TestFileURI(t *testing.T) {
 	t.Parallel()
@@ -16,4 +21,14 @@ func TestFileURI(t *testing.T) {
 	if got := FileURI("/tmp/x.db?mode=rwc"); got != "/tmp/x.db?mode=rwc" {
 		t.Errorf("already has ?: got %q", got)
 	}
+}
+
+func TestConfigureConnectionPool(t *testing.T) {
+	t.Parallel()
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	ConfigureConnectionPool(db)
 }

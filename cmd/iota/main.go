@@ -156,7 +156,7 @@ func run() error {
 	}
 
 	var (
-		mode               = flag.String("mode", "sqs", "mode: once, watch, s3-poll, sqs, eventbridge, or audit-tail")
+		mode               = flag.String("mode", "eventbridge", "mode: once, watch, s3-poll, sqs, eventbridge, or audit-tail (default eventbridge for CloudTrail API ingestion)")
 		jsonlFile          = flag.String("jsonl", "", "path to jsonl file (once mode)")
 		eventsDir          = flag.String("events-dir", "", "path to events directory (watch mode)")
 		auditLogPath       = flag.String("audit-log", "", "path to Kubernetes audit log (audit-tail); default IOTA_AUDIT_LOG or /var/lib/rancher/k3s/server/logs/audit.log")

@@ -19,8 +19,9 @@ iota is a self-hosted security detection engine that mirrors common cloud SIEM c
 
 | Mode | Source | Trigger | Use Case |
 |------|--------|---------|----------|
-| `sqs` | S3-based logs | S3 → SNS → SQS | CloudTrail, VPC Flow, ALB |
-| `eventbridge` | SaaS logs | EventBridge → SQS | Okta, 1Password, Sailpoint |
+| `eventbridge` | **CloudTrail** (default bus) | CloudTrail → EventBridge → SQS | **Default for AWS API detections** — low latency vs S3 file delivery |
+| `eventbridge` | SaaS | Partner bus → EventBridge → SQS | Okta, 1Password, Sailpoint |
+| `sqs` | S3-based logs | S3 → SNS → SQS | **Cost-saving / batched** — CloudTrail files, VPC Flow, ALB (multi-minute trail-to-S3 delay) |
 
 ### Core Components
 

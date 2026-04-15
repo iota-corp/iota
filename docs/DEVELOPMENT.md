@@ -133,15 +133,17 @@ For **GCP** or **GitHub** shapes already in-tree, grep for **`GCP.AuditLog`** or
 
 ---
 
-## 6. Detection pipeline (CloudTrail / S3 → SQS)
+## 6. Detection pipeline (CloudTrail)
 
-High level:
+**Preferred path — EventBridge → SQS (`--mode=eventbridge`):** CloudTrail emits on the **default event bus**; a rule sends **`AWS API Call via CloudTrail`** events to **SQS**; **`cmd/iota/eventbridge_handler.go`** unmarshals json and runs **logprocessor** + **rules** with spans such as **`process_eventbridge_event`**. **Lower latency** than waiting for **S3 log files**. See **[README.md](../README.md#how-it-works)** for performance notes and EventBridge **rule pattern** pitfalls (`source` is usually the **calling service**, not `aws.cloudtrail`).
+
+**Cost-saving / file path — S3 notifications → SQS (`--mode=sqs`):**
 
 1. **S3** `ObjectCreated` on CloudTrail prefix → **SNS** → **SQS** message with bucket/key.
 2. **`cmd/iota/sqs_handler.go`** receives messages, **GetObject**s the body, **gunzips** when the key ends with **`.gz`** or **`Content-Encoding: gzip`** (same idea as **`s3poller`**), passes the stream to **`logprocessor.Processor.Process`**, then runs the **rules engine** on batches.
 3. Matches go to **deduplication** and **alert** outputs (Slack, etc.).
 
-**Latency:** Most “why did my test wait 10 minutes?” is **CloudTrail → S3 delivery**, not iota. See **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** for end-to-end vs tunable vs not-yet-wired behavior.
+**Latency:** For **`sqs`**, most “why did my test wait 10 minutes?” is **CloudTrail → S3 delivery**, not iota. See **[docs/detection-pipeline-checklist.md](detection-pipeline-checklist.md)** for end-to-end vs tunable vs not-yet-wired behavior.
 
 **SQS receive behavior:** **`internal/events/sqs_processor.go`** implements long polling. **`runSQS`** and **`runEventBridge`** use **`MaxMessages: 10`** and **`WaitTime: 20`** by default, overridable with **`IOTA_SQS_MAX_MESSAGES`** (1–10) and **`IOTA_SQS_WAIT_SECONDS`** (0–20).
 

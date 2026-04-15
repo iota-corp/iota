@@ -35,3 +35,7 @@ Pushes to **main** in `iota` can create a new tag; the **Release** workflow then
 - **Local:** Run `./scripts/next-release-version.sh`, then `git tag` / `git push origin <tag>` (see `make release-help`). To refresh the live cluster via GitOps, push the tag and any `iota-deployments` updates to the remotes Argo watches.
 
 Use `[skip release]` in a commit subject to push to `main` without cutting a release from that push.
+
+## CLI default `--mode`
+
+The **`cmd/iota`** default **`--mode`** is **`eventbridge`** (aligned with low-latency CloudTrail API ingestion). Scripts or containers that relied on the previous default **`sqs`** must pass **`--mode=sqs`** explicitly. Kubernetes manifests in **iota** / **iota-deployments** that already set **`--mode=sqs`** in **`args`** are unchanged.

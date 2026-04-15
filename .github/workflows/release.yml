@@ -48,7 +48,7 @@ jobs:
       github.ref == 'refs/heads/main' &&
       github.actor != 'github-actions[bot]' &&
       !contains(github.event.head_commit.message, '[skip release]')
-    runs-on: [self-hosted, beelink]
+    runs-on: [self-hosted, homelab-arc-arm]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,7 +122,7 @@ jobs:
   docker-publish:
     name: Docker push (linux/amd64)
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, beelink]
+    runs-on: [self-hosted, homelab-arc-arm]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
       CHECKOUT_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', github.event.inputs.tag) || github.ref }}
@@ -183,7 +183,7 @@ jobs:
     name: Bump image tag in iota-deployments
     needs: [docker-publish]
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, beelink]
+    runs-on: [self-hosted, homelab-arc-arm]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:
@@ -228,7 +228,7 @@ jobs:
   attach-binaries:
     name: Attach binaries to GitHub Release
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, beelink]
+    runs-on: [self-hosted, homelab-arc-arm]
     needs: [build-binary]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
@@ -281,7 +281,7 @@ jobs:
     name: Sync version manifest on main
     needs: [docker-publish]
     if: ${{ startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' }}
-    runs-on: [self-hosted, beelink]
+    runs-on: [self-hosted, homelab-arc-arm]
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag || github.ref_name }}
     steps:

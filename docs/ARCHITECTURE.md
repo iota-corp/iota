@@ -6,11 +6,23 @@
 
 iota is a self-hosted security detection engine with enterprise-grade architecture. It runs entirely within your AWS account, consuming CloudTrail, Okta, Google Workspace, and 1Password logs. All detection logic runs locally. No data leaves your control boundary.
 
-iota supports two ingestion modes:
-- **SQS Mode**: For S3-based logs (CloudTrail, VPC Flow, ALB, etc.) via S3 event notifications
-- **EventBridge Mode**: For streaming SaaS logs (Okta, 1Password, Sailpoint) via EventBridge partner buses
+iota supports these ingestion modes:
+
+| Mode flag | Typical source | When to use |
+|-----------|----------------|-------------|
+| **`eventbridge`** | **CloudTrail** on the default event bus → rule → SQS, or **SaaS** partner buses → SQS | **Default for CloudTrail API detections:** lower end-to-end latency (seconds vs multi-minute log file delivery). |
+| **`eventbridge`** | Okta, 1Password, Sailpoint | Partner EventBridge integrations → SQS (same processor path as CloudTrail EventBridge). |
+| **`sqs`** | S3 object notifications → SQS (bucket/key) | **Cost-saving / batched:** CloudTrail **`.json.gz`** files in S3; higher latency, fewer per-API downstream events than a broad EventBridge rule. |
+
+**Performance (CloudTrail):** **`eventbridge`** processes **small JSON** messages (often one API call per envelope) — OpenTelemetry spans such as **`process_eventbridge_event`**; CPU is mostly **rules engine**. **`sqs`** downloads **large gzip files**, decompresses, parses **many records** per object — spans such as **`process_s3_object`**, **`s3.GetObject`**, **`logprocessor.Process`**.
 
 ## System Architecture
+
+### Mode A: EventBridge → SQS (CloudTrail API events — recommended default)
+
+CloudTrail emits **`AWS API Call via CloudTrail`** on the **account default event bus**. An EventBridge rule (correctly matched on `detail-type`, and typically **not** restricted to `source: aws.cloudtrail` alone) forwards events to SQS. iota **`--mode=eventbridge`** consumes messages and unwraps envelopes; **no S3 GetObject** for that ingestion path.
+
+See **[README.md — how it works](../README.md#how-it-works)** for the performance tradeoff vs S3 file delivery.
 
 ### Mode 1: SQS Mode (S3-based logs)
 
@@ -91,7 +103,7 @@ iota supports two ingestion modes:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### Mode 2: EventBridge Mode (Streaming SaaS logs)
+### Mode 2: EventBridge Mode (Streaming SaaS logs — partner buses)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐

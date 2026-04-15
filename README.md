@@ -27,40 +27,52 @@ iota gives you:
 
 ## how it works
 
-### cloudtrail mode (s3-based)
+### aws cloudtrail — default: `--mode=eventbridge` (recommended)
+
+**use this** when you want **low detection latency** and **per-api-call** processing. cloudtrail emits **`AWS API Call via CloudTrail`** on the **default event bus**; an eventbridge rule forwards matching events to **sqs**; iota reads the queue and unwraps small json payloads (**no s3 download** for this path).
 
 ```
-cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota processor → adaptive classifier → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
+cloudtrail → eventbridge (default bus) → rule → sqs → iota (--mode=eventbridge) → log processor → rules engine → deduplication → alerts
 ```
 
-### eventbridge mode (real-time saas logs)
+rough performance profile (typical lab/prod):
+
+| aspect               | cloudtrail + eventbridge + sqs                                                                 |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| **delivery**         | seconds after the api call (eventbridge + queue + poll)                                        |
+| **per-message work** | small json → parse → **rules engine** dominates cpu (~hundreds of ms per event in many setups) |
+| **observability**    | otel spans such as **`process_eventbridge_event`**; no **`s3.GetObject`** on this path         |
+
+**important:** eventbridge rules must match **`detail-type: AWS API Call via CloudTrail`** using the **originating service** as `source` (e.g. `aws.s3`, `aws.iam`) — **not** only `aws.cloudtrail`, or you will match almost nothing except cloudtrail’s own control-plane apis.
+
+### aws cloudtrail — cost-saving: `--mode=sqs` (s3 notifications)
+
+**use this** when you want to **avoid high eventbridge invocation volume** and can tolerate **multi-minute** end-to-end delay. cloudtrail still writes **batched `.json.gz` log files** to s3; **s3 object notifications** (often via **sns**) drive an **sqs** queue of bucket/key pointers; iota **downloads and parses** each file.
 
 ```
-okta/1password/sailpoint → eventbridge partner bus → sqs queue → iota processor → adaptive classifier → log processor → data lake (s3) → rules engine → deduplication → alert forwarder → alerts
+cloudtrail (s3) → s3 notifications → sns topic → sqs queue → iota (--mode=sqs) → s3 getobject → gunzip → log processor → rules engine → deduplication → alerts
 ```
 
-**cloudtrail mode** (file-based):
+rough performance profile:
 
-1. **cloudtrail** writes logs to s3 bucket
-2. **s3 notifications** trigger sns topic on new object creation
-3. **sns → sqs** delivers notifications to sqs queue
-4. **iota sqs processor** receives notifications and downloads log files
-5. **adaptive classifier** uses penalty-based priority queue to identify log type
-6. **log processor** parses and normalizes events by log type
-7. **data lake** stores processed events in s3 with partitioning (optional)
-8. **rules engine** executes python detection rules
-9. **deduplication** prevents alert fatigue
-10. **alert forwarder** routes alerts to slack, stdout, or other outputs
+| aspect              | s3 file path + sqs                                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **delivery**        | dominated by **cloudtrail → s3** batching (**often ~5–15+ minutes**) before a new object exists to notify on                                          |
+| **per-object work** | **s3 getobject** + decompress + parse **many records** per file → higher wall time per **`process_s3_object`** span than a single eventbridge message |
+| **cost tradeoff**   | fewer “per-api” downstream events than a broad eventbridge rule; you still pay for **s3** storage and **sqs** polling                                 |
 
-**eventbridge mode** (streaming):
+same downstream stages after parse: **data lake** (optional) → **rules engine** → **deduplication** → **alert forwarder**.
 
-1. **saas provider** (okta, 1password, sailpoint) sends events to eventbridge partner bus
-2. **eventbridge rule** routes events to sqs queue
-3. **iota eventbridge processor** receives events directly (no s3 download)
-4. **envelope unwrapper** extracts log payload from eventbridge envelope
-5. **adaptive classifier** identifies log type from envelope metadata
-6. **log processor** parses and normalizes events
-7. steps 7-10 same as cloudtrail mode
+### saas logs — `--mode=eventbridge` (partner event buses)
+
+```
+okta / 1password / sailpoint → eventbridge partner bus → rule → sqs → iota (--mode=eventbridge) → envelope unwrap → log processor → rules engine → …
+```
+
+1. **saas** sends events to a **partner** event bus
+2. **eventbridge rule** routes to **sqs**
+3. **iota** unwraps the envelope, classifies **log type**, runs **rules**
+4. same **deduplication** and **alerts** as above
 
 ## quick start
 
@@ -68,7 +80,9 @@ okta/1password/sailpoint → eventbridge partner bus → sqs queue → iota proc
 
 - go 1.25+
 - python 3.11+
-- aws credentials with cloudtrail s3 read access (for live ingestion modes)
+- aws credentials: **sqs** receive/delete; **s3** read on the cloudtrail bucket only if you use **`--mode=sqs`** (see [how it works](#how-it-works))
+
+**cli default:** **`--mode`** defaults to **`eventbridge`**. Use **`--mode=sqs`** explicitly for the s3 log-file / notification path. Running with no mode flags requires **`--sqs-queue-url`** (and aws config) suitable for your eventbridge-fed queue.
 
 ### installation
 
@@ -97,19 +111,19 @@ go build -o bin/iota ./cmd/iota
 
 production manifests and per-cluster settings live in **iota-deployments** (kustomize overlays, secrets, queue urls). base kubernetes yaml is maintained in this repo under **`deployments/kubernetes/base`** and vendored/synced there—see **iota-deployments** `README.md`.
 
-**compute:** eks, k3s, ecs, fargate, or ec2 · **permissions:** s3 read for cloudtrail (sqs mode), sqs receive/delete · **storage:** persistent disk for sqlite state/dedup
+**compute:** eks, k3s, ecs, fargate, or ec2 · **permissions:** **sqs** receive/delete on the ingestion queue; **`--mode=sqs`** also needs **s3** get/list on the cloudtrail bucket (downloads **`.json.gz`** log files). **`--mode=eventbridge`** for cloudtrail **api** events ingests **json from sqs** (no per-detection s3 log file download) · **storage:** persistent disk for sqlite state/dedup
 
 the official container image includes bundled rules under `/app/rules` (see the `dockerfile`). point `--rules` at a subdirectory such as `/app/rules/aws_cloudtrail` or `/app/rules/okta`; you normally do **not** mount a configmap for rules.
 
-example eks deployment (cloudtrail mode):
+example eks deployment (**cloudtrail via eventbridge** — default for aws api detections):
 
 ```yaml
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: iota-cloudtrail
+  name: iota-cloudtrail-eb
 spec:
-  replicas: 2
+  replicas: 1
   template:
     spec:
       serviceAccountName: iota
@@ -117,15 +131,16 @@ spec:
         - name: iota
           image: your-registry/iota:latest
           args:
-            - --mode=sqs
+            - --mode=eventbridge
             - --sqs-queue-url=$(SQS_QUEUE_URL)
             - --s3-bucket=$(S3_BUCKET)
             - --aws-region=$(AWS_REGION)
             - --rules=/app/rules/aws_cloudtrail
             - --state=/data/state.db
           env:
+            # queue fed by eventbridge rule (not s3 object notifications)
             - name: SQS_QUEUE_URL
-              value: "https://sqs.us-east-1.amazonaws.com/123456789012/iota-cloudtrail-queue"
+              value: "https://sqs.us-east-1.amazonaws.com/123456789012/cloudtrail-eventbridge-to-iota"
             - name: S3_BUCKET
               value: "your-cloudtrail-bucket"
             - name: AWS_REGION
@@ -150,7 +165,58 @@ spec:
             claimName: iota-state
 ```
 
-example eks deployment (eventbridge mode for okta):
+use a **distinct** `OTEL_SERVICE_NAME` (e.g. `iota-eventbridge`) if you run this **alongside** the s3/sqs deployment so traces stay separable.
+
+example eks deployment (**cloudtrail via s3 notifications + sqs** — cost-saving / higher latency):
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: iota-cloudtrail-s3
+spec:
+  replicas: 2
+  template:
+    spec:
+      serviceAccountName: iota
+      containers:
+        - name: iota
+          image: your-registry/iota:latest
+          args:
+            - --mode=sqs
+            - --sqs-queue-url=$(SQS_QUEUE_URL)
+            - --s3-bucket=$(S3_BUCKET)
+            - --aws-region=$(AWS_REGION)
+            - --rules=/app/rules/aws_cloudtrail
+            - --state=/data/state.db
+          env:
+            - name: SQS_QUEUE_URL
+              value: "https://sqs.us-east-1.amazonaws.com/123456789012/iota-cloudtrail-s3-notify-queue"
+            - name: S3_BUCKET
+              value: "your-cloudtrail-bucket"
+            - name: AWS_REGION
+              value: "us-east-1"
+          ports:
+            - name: health
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+          volumeMounts:
+            - name: state
+              mountPath: /data
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: iota-state
+```
+
+example eks deployment (eventbridge mode for **okta** / saas):
 
 ```yaml
 apiVersion: apps/v1
@@ -424,10 +490,10 @@ mit license. see LICENSE file.
 
 **status**: beta - core detection engine working, event-driven processing with SNS/SQS and EventBridge, adaptive classifier with multi-log source support, data lake and deduplication implemented
 
-**architecture**: dual-mode processing - SNS/SQS for S3-based logs, EventBridge for streaming SaaS logs. adaptive classifier with penalty-based priority queue, health check endpoints, terraform module for infrastructure
+**architecture**: **cloudtrail api detections:** prefer **`--mode=eventbridge`** (low latency); optional **`--mode=sqs`** for s3 file notifications (cost / volume tradeoffs). **saas:** eventbridge partner buses → sqs. adaptive classifier with penalty-based priority queue, health check endpoints; infra examples in **iota-infra** / **iota-deployments**
 
 **compatibility**:
 
 - aws logs: cloudtrail, s3 server access, vpc flow, alb, aurora mysql audit
 - saas logs: okta systemlog, google workspace reports, 1password signinattempt
-- delivery: s3 event notifications (cloudtrail), eventbridge partner buses (okta, 1password, sailpoint)
+- delivery: **cloudtrail:** eventbridge → sqs (recommended), or s3 notifications → sqs; **saas:** eventbridge partner buses (okta, 1password, sailpoint)

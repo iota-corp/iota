@@ -4,9 +4,16 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 
 ## End-to-end latency (what AWS controls vs iota)
 
+**CloudTrail + EventBridge + SQS (`--mode=eventbridge`) — default for low latency**
+
+- [ ] **CloudTrail → EventBridge → rule → SQS**: Typically **seconds** from API call to message in SQS (plus **SQS** long-poll wait, default **20s** max when empty). iota work per message is **small JSON** → **rules engine**; OTel spans include **`process_eventbridge_event`** (not **`s3.GetObject`**).
+- [ ] **Rule pattern**: Must match real **`AWS API Call via CloudTrail`** events ( **`source`** is usually the **originating service**, e.g. `aws.s3`, not only `aws.cloudtrail` ) or the queue stays empty while S3 logging still works.
+
+**CloudTrail + S3 file + SQS (`--mode=sqs`) — cost-saving / batched**
+
 - [ ] **CloudTrail → S3**: AWS batches and delivers log files on a **multi-minute** cadence (often ~5–15 minutes). This dominates “attack-sim waited 600s” style tests; iota cannot shorten CloudTrail’s delivery SLA.
 - [ ] **S3 event → SQS → iota**: After an object lands, SQS long polling uses **WaitTimeSeconds** (default **20**). Each receive can wait up to that long when the queue is empty.
-- [ ] **Per-object work**: One gzip log file → parse → one Python **engine** subprocess per batch of events. Large rule sets increase CPU time per batch.
+- [ ] **Per-object work**: One gzip log file → **GetObject** → parse → one Python **engine** subprocess per batch of events. Large rule sets increase CPU time per batch. OTel spans include **`process_s3_object`**, **`s3.GetObject`**, **`logprocessor.Process`**.
 
 ## iota throughput (tunables today)
 

@@ -459,6 +459,7 @@ Pushes to **`main`** can create the next **`v*.*.*`** tag automatically (see [`d
 
 - **[CLAUDE.md](CLAUDE.md)** — doc index and minimum commands for coding agents
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** — OpenSpec workflow, branch/pr conventions, TDD, repo map, GitOps
+- **[docs/TIER-B-C.md](docs/TIER-B-C.md)** — SQS/EventBridge env tuning, parallelism, Tier C ops (DLQ, replicas)
 - **[TESTING.md](TESTING.md)** — fixtures, integration tests, smoke, attack-sim
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** — detailed architecture
 

@@ -74,6 +74,19 @@ func sqsReceiveConfigFromEnv() (maxMessages, waitTime int32) {
 	return maxMessages, waitTime
 }
 
+// sqsProcessConcurrencyFromEnv returns how many SQS messages to process in parallel per receive
+// (SQS and EventBridge ingestion paths). Default 1. Set IOTA_SQS_PROCESS_CONCURRENCY=2–8 after enabling
+// SQLite WAL (state/dedup dbs) and load-testing; higher values increase SQLite lock risk.
+func sqsProcessConcurrencyFromEnv() int {
+	n := 1
+	if s := strings.TrimSpace(os.Getenv("IOTA_SQS_PROCESS_CONCURRENCY")); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v >= 1 && v <= 32 {
+			n = v
+		}
+	}
+	return n
+}
+
 func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, downloadWorkers, processWorkers int, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
 	log.Printf("starting SQS processor: queue=%s", queueURL)
 	if latencyTraceEnabled() {
@@ -95,6 +108,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	defer func() { _ = stateDB.Close() }()
 
 	eng := engine.New(python, enginePy, rulesDir)
+	defer func() { _ = eng.Close() }()
 
 	var bloomFilter *bloom.Filter
 	if bloomFile != "" {
@@ -116,6 +130,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	} else {
 		processor = logprocessor.New()
 	}
+	processor.SetClassifyWorkers(processWorkers)
 
 	dedup, err := deduplication.New(stateFile)
 	if err != nil {
@@ -321,13 +336,16 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 	}
 
 	maxMsgs, waitSec := sqsReceiveConfigFromEnv()
+	procConc := sqsProcessConcurrencyFromEnv()
 	sqsProcessor := events.NewSQSProcessor(sqsClient, events.Config{
-		QueueURL:    queueURL,
-		Handler:     handler,
-		MaxMessages: maxMsgs,
-		WaitTime:    waitSec,
+		QueueURL:             queueURL,
+		Handler:              handler,
+		MaxMessages:          maxMsgs,
+		WaitTime:             waitSec,
+		ProcessConcurrency:   procConc,
+		ObjectConcurrency:    downloadWorkers,
 	})
-	log.Printf("SQS processor: maxMessages=%d waitTimeSeconds=%d", maxMsgs, waitSec)
+	log.Printf("SQS processor: maxMessages=%d waitTimeSeconds=%d processConcurrency=%d objectConcurrency=%d (download-workers)", maxMsgs, waitSec, procConc, downloadWorkers)
 
 	log.Println("SQS processor started, press ctrl+c to stop")
 	return sqsProcessor.Process(ctx)

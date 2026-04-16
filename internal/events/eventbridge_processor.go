@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -15,11 +16,12 @@ import (
 type EventHandler func(ctx context.Context, eventJSON []byte, logType string, envelope *EventBridgeEnvelope) error
 
 type EventBridgeProcessor struct {
-	client      *sqs.Client
-	queueURL    string
-	handler     EventHandler
-	maxMessages int32
-	waitTime    int32
+	client             *sqs.Client
+	queueURL           string
+	handler            EventHandler
+	maxMessages        int32
+	waitTime           int32
+	processConcurrency int
 }
 
 type EventBridgeConfig struct {
@@ -27,6 +29,8 @@ type EventBridgeConfig struct {
 	Handler     EventHandler
 	MaxMessages int32
 	WaitTime    int32
+	// ProcessConcurrency is SQS messages processed in parallel per receive (default 1).
+	ProcessConcurrency int
 }
 
 func NewEventBridgeProcessor(client *sqs.Client, cfg EventBridgeConfig) *EventBridgeProcessor {
@@ -39,12 +43,18 @@ func NewEventBridgeProcessor(client *sqs.Client, cfg EventBridgeConfig) *EventBr
 		waitTime = 20
 	}
 
+	procConc := cfg.ProcessConcurrency
+	if procConc <= 0 {
+		procConc = 1
+	}
+
 	return &EventBridgeProcessor{
-		client:      client,
-		queueURL:    cfg.QueueURL,
-		handler:     cfg.Handler,
-		maxMessages: maxMessages,
-		waitTime:    waitTime,
+		client:             client,
+		queueURL:           cfg.QueueURL,
+		handler:            cfg.Handler,
+		maxMessages:        maxMessages,
+		waitTime:           waitTime,
+		processConcurrency: procConc,
 	}
 }
 
@@ -66,14 +76,49 @@ func (p *EventBridgeProcessor) Process(ctx context.Context) error {
 			return fmt.Errorf("receive message: %w", err)
 		}
 
-		for _, message := range result.Messages {
-			if err := p.processMessage(ctx, message); err != nil {
-				log.Printf("error processing message: %v", err)
+		msgs := result.Messages
+		if len(msgs) == 0 {
+			continue
+		}
+
+		if p.processConcurrency <= 1 {
+			for _, message := range msgs {
+				if err := p.processMessage(ctx, message); err != nil {
+					log.Printf("error processing message: %v", err)
+					continue
+				}
+				if _, err := p.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+					QueueUrl:        aws.String(p.queueURL),
+					ReceiptHandle: message.ReceiptHandle,
+				}); err != nil {
+					log.Printf("error deleting message: %v", err)
+				}
+			}
+			continue
+		}
+
+		errs := make([]error, len(msgs))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, p.processConcurrency)
+		for i := range msgs {
+			i, message := i, msgs[i]
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				errs[i] = p.processMessage(ctx, message)
+			}()
+		}
+		wg.Wait()
+
+		for i, message := range msgs {
+			if errs[i] != nil {
+				log.Printf("eventbridge sqs: skip delete after process error: %v", errs[i])
 				continue
 			}
-
 			if _, err := p.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-				QueueUrl:      aws.String(p.queueURL),
+				QueueUrl:        aws.String(p.queueURL),
 				ReceiptHandle: message.ReceiptHandle,
 			}); err != nil {
 				log.Printf("error deleting message: %v", err)

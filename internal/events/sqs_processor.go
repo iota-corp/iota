@@ -4,19 +4,24 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 	"github.com/bilals12/iota/internal/metrics"
+	"golang.org/x/sync/errgroup"
 )
 
 type SQSProcessor struct {
-	client      *sqs.Client
-	queueURL    string
-	handler     func(ctx context.Context, s3Bucket, s3Key string, sqsMeta MessageMetadata) error
-	maxMessages int32
-	waitTime    int32
+	client             *sqs.Client
+	queueURL           string
+	handler              func(ctx context.Context, s3Bucket, s3Key string, sqsMeta MessageMetadata) error
+	maxMessages          int32
+	waitTime             int32
+	processConcurrency   int
+	objectConcurrency    int
 }
 
 type Config struct {
@@ -24,6 +29,12 @@ type Config struct {
 	Handler     func(ctx context.Context, s3Bucket, s3Key string, sqsMeta MessageMetadata) error
 	MaxMessages int32
 	WaitTime    int32
+	// ProcessConcurrency is the number of SQS messages to handle in parallel per receive (default 1).
+	// Requires SQLite WAL (enabled for state/dedup dbs); start with 2–4 and watch for lock errors.
+	ProcessConcurrency int
+	// ObjectConcurrency limits parallel S3 object handlers when one SQS message carries multiple Records (default 1).
+	// Set from --download-workers in cmd/iota SQS mode.
+	ObjectConcurrency int
 }
 
 func NewSQSProcessor(client *sqs.Client, cfg Config) *SQSProcessor {
@@ -36,12 +47,23 @@ func NewSQSProcessor(client *sqs.Client, cfg Config) *SQSProcessor {
 		waitTime = 20
 	}
 
+	procConc := cfg.ProcessConcurrency
+	if procConc <= 0 {
+		procConc = 1
+	}
+	objConc := cfg.ObjectConcurrency
+	if objConc <= 0 {
+		objConc = 1
+	}
+
 	return &SQSProcessor{
-		client:      client,
-		queueURL:    cfg.QueueURL,
-		handler:     cfg.Handler,
-		maxMessages: maxMessages,
-		waitTime:    waitTime,
+		client:              client,
+		queueURL:            cfg.QueueURL,
+		handler:             cfg.Handler,
+		maxMessages:         maxMessages,
+		waitTime:            waitTime,
+		processConcurrency:  procConc,
+		objectConcurrency:   objConc,
 	}
 }
 
@@ -68,13 +90,48 @@ func (p *SQSProcessor) Process(ctx context.Context) error {
 			return fmt.Errorf("receive message: %w", err)
 		}
 
-		for _, message := range result.Messages {
-			if err := p.processMessage(ctx, message); err != nil {
+		msgs := result.Messages
+		if len(msgs) == 0 {
+			continue
+		}
+
+		if p.processConcurrency <= 1 {
+			for _, message := range msgs {
+				if err := p.processMessage(ctx, message); err != nil {
+					continue
+				}
+				if _, err := p.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
+					QueueUrl:        aws.String(p.queueURL),
+					ReceiptHandle: message.ReceiptHandle,
+				}); err != nil {
+					return fmt.Errorf("delete message: %w", err)
+				}
+			}
+			continue
+		}
+
+		errs := make([]error, len(msgs))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, p.processConcurrency)
+		for i := range msgs {
+			i, message := i, msgs[i]
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				errs[i] = p.processMessage(ctx, message)
+			}()
+		}
+		wg.Wait()
+
+		for i, message := range msgs {
+			if errs[i] != nil {
+				log.Printf("sqs: skip delete after process error: %v", errs[i])
 				continue
 			}
-
 			if _, err := p.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
-				QueueUrl:      aws.String(p.queueURL),
+				QueueUrl:        aws.String(p.queueURL),
 				ReceiptHandle: message.ReceiptHandle,
 			}); err != nil {
 				return fmt.Errorf("delete message: %w", err)
@@ -102,13 +159,30 @@ func (p *SQSProcessor) processMessage(ctx context.Context, message types.Message
 	}
 
 	meta := ParseMessageSystemAttributes(message)
-	for _, obj := range objects {
-		if err := p.handler(ctx, obj.Bucket, obj.Key, meta); err != nil {
-			return fmt.Errorf("handle s3 object %s/%s: %w", obj.Bucket, obj.Key, err)
+
+	if p.objectConcurrency <= 1 || len(objects) <= 1 {
+		for _, obj := range objects {
+			if err := p.handler(ctx, obj.Bucket, obj.Key, meta); err != nil {
+				return fmt.Errorf("handle s3 object %s/%s: %w", obj.Bucket, obj.Key, err)
+			}
 		}
+		return nil
 	}
 
-	return nil
+	g, gctx := errgroup.WithContext(ctx)
+	sem := make(chan struct{}, p.objectConcurrency)
+	for _, obj := range objects {
+		obj := obj
+		g.Go(func() error {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			if err := p.handler(gctx, obj.Bucket, obj.Key, meta); err != nil {
+				return fmt.Errorf("handle s3 object %s/%s: %w", obj.Bucket, obj.Key, err)
+			}
+			return nil
+		})
+	}
+	return g.Wait()
 }
 
 // ParseS3Notification extracts S3 object refs from an SQS message body. AWS uses two shapes:

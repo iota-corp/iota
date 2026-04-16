@@ -4,9 +4,11 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/bilals12/iota/internal/metrics"
+	"github.com/bilals12/iota/internal/sqliteutil"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -22,11 +24,12 @@ CREATE TABLE IF NOT EXISTS state (
 )`
 
 type DB struct {
+	mu sync.RWMutex
 	db *sql.DB
 }
 
 func Open(path string) (*DB, error) {
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite3", sqliteutil.FileURI(path))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -38,16 +41,24 @@ func Open(path string) (*DB, error) {
 	}
 	metrics.RecordStateDBOperation("state_init_schema", "success")
 
+	sqliteutil.ConfigureConnectionPool(db)
+
 	log.Printf("initialized state database: %s", path)
 
 	return &DB{db: db}, nil
 }
 
 func (d *DB) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	return d.db.Close()
 }
 
 func (d *DB) GetLastProcessedKey(bucket, accountID, region string) (key string, err error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"
@@ -78,6 +89,9 @@ func (d *DB) GetLastProcessedKey(bucket, accountID, region string) (key string, 
 }
 
 func (d *DB) UpdateLastProcessedKey(bucket, accountID, region, key string) (err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"

@@ -10,6 +10,7 @@ Use this file as the **entry point** when working in this repository with Claude
 | **[openspec/AGENTS.md](openspec/AGENTS.md)**     | OpenSpec workflow detail (Turo-style: specs in `openspec/specs/`, changes under `openspec/changes/<id>/`).     |
 | **[openspec/project.md](openspec/project.md)**   | Product context, log types, conventions.                                                                       |
 | **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** | System architecture and diagrams (reference, not step-by-step).                                                |
+| **[docs/TIER-B-C.md](docs/TIER-B-C.md)**         | SQS/EventBridge tuning env vars, parallelism, Tier C ops (DLQ, replicas).                                      |
 | **[TESTING.md](TESTING.md)**                     | Deep dive: fixtures, CloudTrail tests, gunzip examples.                                                        |
 
 ## Minimum commands (before proposing code)

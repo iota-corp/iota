@@ -19,6 +19,7 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 
 - [x] **`IOTA_SQS_MAX_MESSAGES`**: SQS receive batch size, **1–10** (default **10**). Higher can pull more notifications per poll when the queue is backlogged. Wired in **`runSQS`** / **`runEventBridge`**.
 - [x] **`IOTA_SQS_WAIT_SECONDS`**: Long-poll wait, **0–20** (default **20**). Lower reduces worst-case latency when the queue is empty; slightly more API calls. Wired in **`runSQS`** / **`runEventBridge`**.
+- [x] **`IOTA_SQS_PROCESS_CONCURRENCY`**: Process **multiple messages from one receive** in parallel (**1–32**, default **1**). State/dedup SQLite uses **WAL** + busy timeout to reduce lock contention. See **[TIER-B-C.md](TIER-B-C.md)**.
 - [ ] **Deployment CPU/memory**: If the **Python** rule engine is CPU-bound, raising CPU **limit** on the iota container can help. Grafana “Kubernetes / Compute Resources / Namespace” is expected to show **security** as small if traffic is low—that is normal; scale up when processing **lags the queue**.
 
 ## Not wired yet (known gaps)

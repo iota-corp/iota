@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -45,7 +47,32 @@ func ConfigFromEnv() Config {
 	if cfg.Environment == "" {
 		cfg.Environment = "development"
 	}
+	cfg.SampleRate = parseTraceSampleRatio()
 	return cfg
+}
+
+// parseTraceSampleRatio returns a ratio in [0,1] for trace sampling (default 1).
+// Precedence: OTEL_TRACES_SAMPLER_ARG (OpenTelemetry standard, e.g. parentbased_traceidratio uses the arg),
+// then IOTA_OTEL_TRACE_SAMPLE_RATIO.
+func parseTraceSampleRatio() float64 {
+	for _, key := range []string{"OTEL_TRACES_SAMPLER_ARG", "IOTA_OTEL_TRACE_SAMPLE_RATIO"} {
+		v := strings.TrimSpace(os.Getenv(key))
+		if v == "" {
+			continue
+		}
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil {
+			continue
+		}
+		if f < 0 {
+			return 0
+		}
+		if f > 1 {
+			return 1
+		}
+		return f
+	}
+	return 1.0
 }
 
 func Init(ctx context.Context, cfg Config) (func(context.Context) error, error) {
@@ -78,9 +105,14 @@ func Init(ctx context.Context, cfg Config) (func(context.Context) error, error) 
 		return nil, fmt.Errorf("create exporter: %w", err)
 	}
 
-	sampler := sdktrace.AlwaysSample()
-	if cfg.SampleRate < 1.0 {
-		sampler = sdktrace.TraceIDRatioBased(cfg.SampleRate)
+	var sampler sdktrace.Sampler
+	switch {
+	case cfg.SampleRate >= 1.0:
+		sampler = sdktrace.AlwaysSample()
+	case cfg.SampleRate <= 0:
+		sampler = sdktrace.NeverSample()
+	default:
+		sampler = sdktrace.ParentBased(sdktrace.TraceIDRatioBased(cfg.SampleRate))
 	}
 
 	tp := sdktrace.NewTracerProvider(

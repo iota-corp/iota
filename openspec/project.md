@@ -115,6 +115,8 @@ Tested with real CloudTrail logs:
 - **Memory**: Handles 2.6GB JSON files
 - **Latency**: ~5-6 min end-to-end (bounded by CloudTrail delivery)
 
+Roadmap and discovery findings: **[docs/PERFORMANCE-ROADMAP.md](../docs/PERFORMANCE-ROADMAP.md)**. OpenSpec change **`plan-performance-hot-paths`** ([proposal](../openspec/changes/plan-performance-hot-paths/proposal.md), [tasks](../openspec/changes/plan-performance-hot-paths/tasks.md)) tracks implementation tasks; targets are captured in **[openspec/specs/performance/spec.md](specs/performance/spec.md)**.
+
 ## Important Constraints
 
 - **Data Sovereignty**: Logs never leave customer AWS account

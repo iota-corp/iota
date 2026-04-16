@@ -25,7 +25,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
+func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, enginePy, stateFile, dataLakeBucket, bloomFile string, bloomExpectedItems uint64, bloomFalsePositive float64, processWorkers int, glueDatabase, athenaWorkgroup, athenaResultBucket string, slackClient *alerts.SlackClient) error {
 	log.Printf("starting EventBridge processor: queue=%s", queueURL)
 
 	awsCfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
@@ -37,6 +37,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 	s3Client := s3.NewFromConfig(awsCfg)
 
 	eng := engine.New(python, enginePy, rulesDir)
+	defer func() { _ = eng.Close() }()
 
 	var bloomFilter *bloom.Filter
 	if bloomFile != "" {
@@ -58,6 +59,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 	} else {
 		processor = logprocessor.New()
 	}
+	processor.SetClassifyWorkers(processWorkers)
 
 	dedup, err := deduplication.New(stateFile)
 	if err != nil {
@@ -162,13 +164,15 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 	}
 
 	maxMsgs, waitSec := sqsReceiveConfigFromEnv()
+	procConc := sqsProcessConcurrencyFromEnv()
 	ebProcessor := events.NewEventBridgeProcessor(sqsClient, events.EventBridgeConfig{
-		QueueURL:    queueURL,
-		Handler:     handler,
-		MaxMessages: maxMsgs,
-		WaitTime:    waitSec,
+		QueueURL:             queueURL,
+		Handler:              handler,
+		MaxMessages:          maxMsgs,
+		WaitTime:             waitSec,
+		ProcessConcurrency:   procConc,
 	})
-	log.Printf("EventBridge processor: maxMessages=%d waitTimeSeconds=%d", maxMsgs, waitSec)
+	log.Printf("EventBridge processor: maxMessages=%d waitTimeSeconds=%d processConcurrency=%d", maxMsgs, waitSec, procConc)
 
 	log.Println("EventBridge processor started, press ctrl+c to stop")
 	return ebProcessor.Process(ctx)

@@ -4,16 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/bilals12/iota/internal/metrics"
+	"github.com/bilals12/iota/internal/sqliteutil"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var DedupNamespace = uuid.MustParse("a3bb189e-8bf9-3888-9912-ace4e6543002")
 
 type Deduplicator struct {
+	mu sync.RWMutex
 	db *sql.DB
 }
 
@@ -29,7 +32,7 @@ type AlertInfo struct {
 }
 
 func New(stateFile string) (*Deduplicator, error) {
-	db, err := sql.Open("sqlite3", stateFile)
+	db, err := sql.Open("sqlite3", sqliteutil.FileURI(stateFile))
 	if err != nil {
 		return nil, fmt.Errorf("open dedup db: %w", err)
 	}
@@ -40,6 +43,8 @@ func New(stateFile string) (*Deduplicator, error) {
 		return nil, fmt.Errorf("init dedup db: %w", err)
 	}
 	metrics.RecordStateDBOperation("dedup_init_schema", "success")
+
+	sqliteutil.ConfigureConnectionPool(db)
 
 	return &Deduplicator{db: db}, nil
 }
@@ -67,6 +72,9 @@ func initDedupDB(db *sql.DB) error {
 }
 
 func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title, severity string, dedupPeriodMinutes int) (info *AlertInfo, err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"
@@ -185,6 +193,9 @@ func (d *Deduplicator) UpdateAlertInfo(ctx context.Context, ruleID, dedup, title
 }
 
 func (d *Deduplicator) ResolveAlert(ctx context.Context, alertID string) (err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"
@@ -202,6 +213,9 @@ func (d *Deduplicator) ResolveAlert(ctx context.Context, alertID string) (err er
 }
 
 func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) (alerts []AlertInfo, err error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"
@@ -235,6 +249,9 @@ func (d *Deduplicator) GetOpenAlerts(ctx context.Context, ruleID string) (alerts
 
 // ListOpenAlertsAll returns open alerts across all rules (newest activity first). For IR review and benchmarks.
 func (d *Deduplicator) ListOpenAlertsAll(ctx context.Context, limit, offset int) (alerts []AlertInfo, err error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+
 	start := time.Now()
 	defer func() {
 		st := "success"
@@ -286,6 +303,9 @@ func GenerateAlertID(ruleID, dedupKey string, ts time.Time) string {
 }
 
 func (d *Deduplicator) Close() error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	if d.db != nil {
 		return d.db.Close()
 	}

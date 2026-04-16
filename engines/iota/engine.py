@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 
 import json
+import struct
 import sys
 import importlib.util
 from pathlib import Path
 from collections import defaultdict
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
+
+MAX_FRAME = 512 * 1024 * 1024
 
 
 class Rule:
@@ -134,6 +137,71 @@ class Engine:
         return event
 
 
+def read_frame(f) -> Optional[Dict[str, Any]]:
+    hdr = f.read(4)
+    if len(hdr) == 0:
+        return None
+    if len(hdr) < 4:
+        raise EOFError("short frame header")
+    (n,) = struct.unpack(">I", hdr)
+    if n > MAX_FRAME:
+        raise ValueError("frame too large")
+    body = f.read(n)
+    if len(body) < n:
+        raise EOFError("short frame body")
+    return json.loads(body.decode("utf-8"))
+
+
+def write_frame(f, obj: Dict[str, Any]) -> None:
+    data = json.dumps(obj, separators=(",", ":")).encode("utf-8")
+    if len(data) > MAX_FRAME:
+        raise ValueError("response too large")
+    f.write(struct.pack(">I", len(data)))
+    f.write(data)
+
+
+class WorkerState:
+    def __init__(self) -> None:
+        self._engine: Optional[Engine] = None
+        self._rules_dir: Optional[str] = None
+
+    def get_engine(self, rules_dir: str) -> Engine:
+        if self._rules_dir != rules_dir:
+            self._engine = Engine(rules_dir)
+            self._rules_dir = rules_dir
+        assert self._engine is not None
+        return self._engine
+
+
+def worker_main() -> None:
+    stdin = sys.stdin.buffer
+    stdout = sys.stdout.buffer
+    state = WorkerState()
+    while True:
+        try:
+            req = read_frame(stdin)
+        except EOFError:
+            break
+        if req is None:
+            break
+        rules_dir = req.get("rules_dir")
+        events = req.get("events", [])
+        if rules_dir is None:
+            sys.stderr.write("engine worker: missing rules_dir\n")
+            sys.exit(1)
+        try:
+            eng = state.get_engine(str(rules_dir))
+            response = eng.analyze(events)
+            write_frame(stdout, response)
+            stdout.flush()
+        except BrokenPipeError:
+            break
+        except Exception as e:
+            sys.stderr.write(f"engine worker: analyze error: {e}\n")
+            sys.exit(1)
+    sys.exit(0)
+
+
 def main():
     request = json.load(sys.stdin)
     rules_dir = request.get("rules_dir")
@@ -145,4 +213,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "worker":
+        worker_main()
+    else:
+        main()

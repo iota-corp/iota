@@ -18,7 +18,7 @@ This document is the **handbook for ongoing work** on iota: how to plan changes 
 | **`scripts/attack-sim/`** | End-to-end-ish simulation against real AWS + Prometheus counters. |
 | **`openspec/`** | Structured specs and change proposals (see §2). |
 
-**Architecture narrative:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Breaking changes / releases:** [breaking-changes.md](breaking-changes.md) · **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+**Architecture narrative:** [ARCHITECTURE.md](ARCHITECTURE.md) · **Tier B/C (perf + ops):** [TIER-B-C.md](TIER-B-C.md) · **Breaking changes / releases:** [breaking-changes.md](breaking-changes.md) · **Troubleshooting:** [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
 
 ---
 
@@ -40,7 +40,7 @@ Structured proposals and **current specs** live under **`openspec/`**. Full work
 5. For review, generate or maintain **`spec-diff/`** under the change when your process requires it (see `AGENTS.md`).
 6. Get approval before large implementations; implement **`tasks.md`** in order and check items off when done.
 
-Capabilities today include **`log-processing`**, **`detection-engine`**, **`alerting`**, **`deployment`**, **`historical-queries`**, **`transforms`**, etc. Add a new capability folder if you introduce a major new surface area.
+Capabilities today include **`log-processing`**, **`detection-engine`**, **`alerting`**, **`deployment`**, **`historical-queries`**, **`transforms`**, **`performance`** (roadmap SHOULD/MAY targets), etc. Add a new capability folder if you introduce a major new surface area. For throughput and memory work, see **[PERFORMANCE-ROADMAP.md](PERFORMANCE-ROADMAP.md)** and change **`plan-performance-hot-paths`**.
 
 ---
 

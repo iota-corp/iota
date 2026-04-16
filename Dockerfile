@@ -1,4 +1,5 @@
 # go-duckdb ships a glibc-linked libduckdb.a; musl (Alpine) cannot link it. Use Debian (glibc).
+# Omit remote # syntax=docker/dockerfile:1 so BuildKit does not pull docker/dockerfile from Docker Hub up front.
 #
 # EKS managed nodes are usually linux/amd64. Building on Apple Silicon defaults to arm64 and
 # yields "exec format error" on the cluster — build with:

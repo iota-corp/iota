@@ -12,6 +12,9 @@ import (
 
 	"github.com/bilals12/iota/internal/alertforwarder"
 	"github.com/bilals12/iota/internal/metrics"
+	"github.com/bilals12/iota/internal/telemetry"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type SlackOutput struct {
@@ -28,7 +31,21 @@ func NewSlackOutput(webhookURL string) *SlackOutput {
 	}
 }
 
-func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert) error {
+func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert) (err error) {
+	slackCtx, span := telemetry.StartSpan(ctx, "slack.SendAlert",
+		trace.WithAttributes(
+			attribute.String("alert.rule_id", alert.RuleID),
+			attribute.String("alert.severity", alert.Severity),
+		))
+	start := time.Now()
+	defer func() {
+		span.SetAttributes(attribute.Int64("slack.duration_ms", time.Since(start).Milliseconds()))
+		if err != nil {
+			telemetry.RecordError(slackCtx, err)
+		}
+		span.End()
+	}()
+
 	msg := s.formatMessage(alert)
 
 	body, err := json.Marshal(msg)
@@ -36,7 +53,7 @@ func (s *SlackOutput) SendAlert(ctx context.Context, alert *alertforwarder.Alert
 		return fmt.Errorf("marshal message: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", s.webhookURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(slackCtx, "POST", s.webhookURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}

@@ -156,7 +156,7 @@ For **GCP** or **GitHub** shapes already in-tree, grep for **`GCP.AuditLog`** or
 ## 7. Logs and metrics (what to grep for)
 
 - **Detections:** `cmd/iota/match_log.go` logs lines of the form
-  **`detection: rule_id=… severity=… eventSource=… eventName=… title="…"`**
+  **`detection:`** lines include **`detection_ref=rule_id:event_id`**, and when OTEL tracing is on, **`trace_id`** and **`span_id`** (same as the parent `process_eventbridge_event` span) for log–trace correlation in SigNoz. Slack delivery is a child span **`slack.SendAlert`** with **`slack.duration_ms`**.
   when a rule matches.
 - **Batch summary:** Processing logs **`processed N events, M matches`** (and similar) after rule evaluation.
 - **Prometheus:** With **`ENABLE_METRICS=true`**, scrape **`/metrics`** (container port **8080** in Kubernetes). Useful series include **`iota_events_processed_total`**, **`iota_alerts_generated_total`**, **`iota_alerts_forwarded_total`** (e.g. **`output_type="slack"`**), and Slack failures via **`status="failure"`**.

@@ -309,7 +309,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			return fmt.Errorf("analyze: %w", err)
 		}
 
-		logDetectionMatches(matches)
+		logDetectionMatches(ctx, matches)
 
 		pipelineDur := time.Since(procStart)
 		perEvent := pipelineDur

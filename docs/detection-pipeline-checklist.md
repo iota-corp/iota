@@ -39,7 +39,7 @@ Use this when tuning latency, throughput, or explaining “why is iota idle?” 
 ## Observability
 
 - [x] **Logs**: Each match logs a line
-  `detection: rule_id=… severity=… eventSource=… eventName=… title="…"`
+  `detection:` lines (with optional `trace_id` / `span_id` when OTEL is on; `detection_ref=rule_id:event_id`)
   (**SQS** and **EventBridge** paths), followed by `processed N events, M matches …`.
 - [x] **Prometheus**: `iota_alerts_generated_total` increments per deduped alert; `iota_events_processed_total{log_type="AWS.CloudTrail"}` after traffic.
 - [x] **Rule evaluation volume**: `iota_rules_evaluated_total{rule_id,result}` (`result` = `match` | `no_match`) from engine batch aggregates.

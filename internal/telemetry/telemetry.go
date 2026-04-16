@@ -147,6 +147,16 @@ func SpanFromContext(ctx context.Context) trace.Span {
 	return trace.SpanFromContext(ctx)
 }
 
+// TraceIDsForLog returns W3C trace and span IDs as hex strings for log correlation (e.g. SigNoz).
+// Returns empty strings when the context has no valid span (OTEL disabled, not sampled, or no span).
+func TraceIDsForLog(ctx context.Context) (traceID, spanID string) {
+	sc := trace.SpanFromContext(ctx).SpanContext()
+	if !sc.IsValid() {
+		return "", ""
+	}
+	return sc.TraceID().String(), sc.SpanID().String()
+}
+
 func RecordError(ctx context.Context, err error) {
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
 		span.RecordError(err)

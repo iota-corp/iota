@@ -150,7 +150,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 			return fmt.Errorf("analyze: %w", err)
 		}
 
-		logDetectionMatches(matches)
+		logDetectionMatches(ctx, matches)
 
 		op.SetAttributes(attribute.Int("matches.count", len(matches)))
 

@@ -60,7 +60,7 @@ Capabilities today include **`log-processing`**, **`detection-engine`**, **`aler
 
 **Conventions:** Use **conventional commits** (`feat:`, `fix:`, `docs:`, `chore:`) so release tooling and release notes stay coherent (see [breaking-changes.md](breaking-changes.md)).
 
-**Before merge:** `go test ./...` and **`./scripts/smoke.sh`** (or **`make ci-local`**) locally; CI must be green. Fork PRs run on GitHub-hosted runners; same-repo PRs use the org’s self-hosted labels—see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if CI env differs.
+**Before merge:** `go test ./...`, **`python3 -m unittest discover -s engines/iota -p 'test_*.py'`** (engine index), and **`./scripts/smoke.sh`** (or **`make ci-local`**) locally; CI must be green. Fork PRs run on GitHub-hosted runners; same-repo PRs use the org’s self-hosted labels—see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) if CI env differs.
 
 **Docs and breaking changes:** Anything that affects operators or detection contracts should be reflected in **`docs/breaking-changes.md`** or the relevant spec when applicable.
 

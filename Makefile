@@ -10,6 +10,7 @@ build:
 # Run tests (unit / package tests; set CGO_ENABLED=1 locally if sqlite/duckdb tests fail)
 test:
 	@CGO_ENABLED=1 go test -v ./...
+	@python3 -m unittest discover -s engines/iota -p 'test_*.py' -v
 
 # End-to-end smoke: build + once mode on testdata (same as CI)
 smoke:

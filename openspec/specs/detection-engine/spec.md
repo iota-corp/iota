@@ -48,11 +48,19 @@ The system SHALL automatically discover and load Python rules from the rules dir
 
 #### Scenario: Rule filtering by log type
 
-- **GIVEN** rules organized in `rules/{log_type}/` directories
-- **WHEN** processing an event with known log type
-- **THEN** only rules matching that log type SHALL be evaluated
+- **GIVEN** rules organized in `rules/{pack}/` directories (pack = first path segment under `--rules`, e.g. `github_audit`, `aws_cloudtrail`)
+- **AND** a static map from pack name to one or more canonical classifier log types (see `engines/iota/log_type_index.py`)
+- **WHEN** the Go runtime supplies `log_types` parallel to the event batch (same length as `events`), using each event’s classifier output (`ProcessedEvent.LogType`)
+- **THEN** the Python engine SHALL evaluate only rules whose pack applies to that event’s log type, plus any **unindexed** rules (unknown pack or top-level `.py` files)
 
-**Note:** The reference Python engine (`engines/iota/engine.py`) evaluates every loaded rule against every event in a batch. For production throughput, deployments SHOULD point `--rules` at a single pack or a symlinked subtree (per pipeline / log source) rather than the full tree, or split workloads so each binary does not load unrelated packs. See `openspec/project.md` (Multi-source deployments).
+#### Scenario: Inference when log types are omitted
+
+- **GIVEN** `log_types` is absent, or its length does not match `events`
+- **WHEN** the engine evaluates a batch
+- **THEN** it SHALL infer a canonical log type per event (`infer_log_type_from_event` — `p_log_type`, `eventSource`, and light shape checks)
+- **AND** if inference or mapping is uncertain, unknown packs SHALL still be evaluated for all events (no silent skip)
+
+**Note:** Deployments MAY still point `--rules` at a single pack or symlinked subtree for memory and load-time wins; indexing is complementary. See `openspec/project.md` (Multi-source deployments).
 
 ### Requirement: Extended rule packs
 
@@ -77,9 +85,10 @@ The system SHALL support processing events in batches for efficiency.
 #### Scenario: Batch analysis
 
 - **GIVEN** a batch of events
-- **WHEN** `engine.Analyze(events)` is called
-- **THEN** all events SHALL be evaluated against applicable rules
+- **WHEN** `engine.Analyze` is called with the batch and optional per-event log types
+- **THEN** each event SHALL be evaluated against applicable rules for its log type
 - **AND** all matches SHALL be returned as a single result set
+- **AND** `rule_evaluations` SHALL include only rules that were evaluated for at least one event in the batch
 
 ### Requirement: Alert Output
 
@@ -108,6 +117,6 @@ The Python engine SHALL resolve severity by invoking `severity(event)` when the 
 
 ## Current Implementation
 
-- **Location**: `internal/engine/engine.go`, `engines/iota/engine.py`
+- **Location**: `internal/engine/engine.go`, `engines/iota/engine.py`, `engines/iota/log_type_index.py`
 - **Rule Count**: 254 Python rules under `rules/` (excluding `rules/helpers/`), across CloudTrail, IAM, S3 access, VPC Flow, ALB, Bedrock model invocation, GCP audit and HTTP LB, Kubernetes (EKS/GKE-unified pack), GitHub audit and webhook, Slack audit, Cloudflare firewall/React2Shell, Okta, GSuite, 1Password
-- **Execution**: Python subprocess via `exec.Command`
+- **Execution**: Long-lived Python worker (`engines/iota/engine.py worker`) with length-prefixed JSON frames; optional `log_types` on each request for indexing

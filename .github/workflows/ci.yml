@@ -50,6 +50,9 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -v ./...
 
+      - name: Python engine unit tests
+        run: python3 -m unittest discover -s engines/iota -p 'test_*.py' -v
+
       - name: Smoke test (binary + once mode + Python engine)
         env:
           CGO_ENABLED: "1"

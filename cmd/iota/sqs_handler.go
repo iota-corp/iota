@@ -286,6 +286,11 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 			return nil
 		}
 
+		logTypes := make([]string, 0, len(procEvents))
+		for _, pe := range procEvents {
+			logTypes = append(logTypes, pe.LogType)
+		}
+
 		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze",
 			trace.WithAttributes(
 				attribute.String("s3.bucket", bucket),
@@ -293,7 +298,7 @@ func runSQS(ctx context.Context, queueURL, s3Bucket, region, rulesDir, python, e
 				attribute.Int("events.count", len(batch)),
 			),
 		)
-		matches, err := eng.Analyze(analyzeCtx, batch)
+		matches, err := eng.Analyze(analyzeCtx, batch, logTypes)
 		if err != nil {
 			telemetry.RecordError(analyzeCtx, err)
 		}

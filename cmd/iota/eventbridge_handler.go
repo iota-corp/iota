@@ -110,6 +110,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 		}
 
 		var allEvents []*cloudtrail.Event
+		var logTypes []string
 
 		for _, eventData := range eventBatches {
 			processed, err := processor.ProcessEvent(ctx, eventData, logType)
@@ -125,6 +126,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 					}
 				}
 				allEvents = append(allEvents, pe.Event)
+				logTypes = append(logTypes, pe.LogType)
 			}
 		}
 
@@ -138,7 +140,7 @@ func runEventBridge(ctx context.Context, queueURL, region, rulesDir, python, eng
 		analyzeCtx, analyzeSpan := telemetry.StartSpan(ctx, "engine.Analyze",
 			trace.WithAttributes(attribute.Int("events.count", len(allEvents))),
 		)
-		matches, err := eng.Analyze(analyzeCtx, allEvents)
+		matches, err := eng.Analyze(analyzeCtx, allEvents, logTypes)
 		if err != nil {
 			telemetry.RecordError(analyzeCtx, err)
 		}

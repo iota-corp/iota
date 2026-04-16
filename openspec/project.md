@@ -106,7 +106,7 @@ Additional upstream rules from optional mirrors are ported selectively. Log type
 
 ### Multi-source deployments
 
-The Python subprocess loads every `*.py` rule under the `--rules` directory. For lower CPU cost at scale, run separate workloads or images with `--rules` set to one pack (e.g. `rules/slack_audit`) or a symlinked aggregate, rather than the full tree. Rules that use sliding windows or first-seen keys read state from `IOTA_CORRELATION_STATE` (default `~/.cache/iota/correlation.sqlite`); set `IOTA_CORRELATION=0` only for debugging. Correlation state must persist on disk for the pod if those rules are enabled.
+The Python worker loads every `*.py` rule under `--rules`, but **indexes** by pack (first subdirectory) and classifier **log type** so non-applicable rules are skipped when `log_types` is passed (EventBridge and SQS pipelines). For lower memory and import cost at scale, you can still run separate workloads with `--rules` set to one pack or a symlinked aggregate. Rules that use sliding windows or first-seen keys read state from `IOTA_CORRELATION_STATE` (default `~/.cache/iota/correlation.sqlite`); set `IOTA_CORRELATION=0` only for debugging. Correlation state must persist on disk for the pod if those rules are enabled.
 
 ### Performance Characteristics
 
@@ -115,11 +115,11 @@ Tested with real CloudTrail logs:
 - **Memory**: Handles 2.6GB JSON files
 - **Latency**: ~5-6 min end-to-end (bounded by CloudTrail delivery)
 
-Roadmap and discovery findings: **[docs/PERFORMANCE-ROADMAP.md](../docs/PERFORMANCE-ROADMAP.md)**. OpenSpec change **`plan-performance-hot-paths`** ([proposal](../openspec/changes/plan-performance-hot-paths/proposal.md), [tasks](../openspec/changes/plan-performance-hot-paths/tasks.md)) tracks implementation tasks; targets are captured in **[openspec/specs/performance/spec.md](specs/performance/spec.md)**.
+Roadmap and discovery findings: **[docs/PERFORMANCE-ROADMAP.md](../docs/PERFORMANCE-ROADMAP.md)**. OpenSpec changes **`plan-performance-hot-paths`** ([proposal](../openspec/changes/plan-performance-hot-paths/proposal.md), [tasks](../openspec/changes/plan-performance-hot-paths/tasks.md)) and **`add-rule-log-type-indexing`** ([proposal](../openspec/changes/add-rule-log-type-indexing/proposal.md), [tasks](../openspec/changes/add-rule-log-type-indexing/tasks.md)); targets are captured in **[openspec/specs/performance/spec.md](specs/performance/spec.md)**.
 
 ## Important Constraints
 
 - **Data Sovereignty**: Logs never leave customer AWS account
 - **No Telemetry**: No phone-home behavior
-- **Python Subprocess**: Rules run in isolated Python process
+- **Python worker**: Rules run in a persistent Python subprocess (`engines/iota/engine.py worker`)
 - **IAM Roles**: No credential storage, uses IRSA

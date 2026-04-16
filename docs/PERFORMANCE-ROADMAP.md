@@ -2,8 +2,8 @@
 
 This document captures a **performance discovery pass** on iota’s hot paths: what to optimize, where in the code, and how to verify improvements. Authoritative task tracking lives in OpenSpec:
 
-- **Change id:** `plan-performance-hot-paths`
-- **Proposal / tasks / design:** [openspec/changes/plan-performance-hot-paths/](../openspec/changes/plan-performance-hot-paths/)
+- **Change ids:** `plan-performance-hot-paths`, `add-rule-log-type-indexing`
+- **Proposals:** [plan-performance-hot-paths](../openspec/changes/plan-performance-hot-paths/), [add-rule-log-type-indexing](../openspec/changes/add-rule-log-type-indexing/)
 - **Capability spec (SHOULD/MAY targets):** [openspec/specs/performance/spec.md](../openspec/specs/performance/spec.md)
 
 Use this doc for onboarding and prioritization; use `tasks.md` in the change folder for checkboxes and PR scope.
@@ -12,7 +12,7 @@ Use this doc for onboarding and prioritization; use `tasks.md` in the change fol
 
 | Priority | Theme | Idea | Primary code |
 |----------|--------|------|----------------|
-| P0 | Python + rules | Avoid reloading every rule on every batch; long-lived worker and/or rule indexing | `internal/engine/engine.go`, `engines/iota/engine.py` |
+| P0 | Python + rules | Long-lived worker (**done**); pack + log-type rule indexing (**done**, `engines/iota/log_type_index.py`) | `internal/engine/engine.go`, `engines/iota/engine.py` |
 | P1 | Memory | Stream or chunk large CloudTrail `Records` instead of full-buffer read + per-record string copies | `internal/logprocessor/processor.go`, classifiers |
 | P1 | Correctness / edge perf | Raise or document `bufio.Scanner` max token for huge lines | `internal/logprocessor/` |
 | P2 | Lake write path | Optional async flush after measurement (bounded queue, backpressure) | `internal/datalake/writer.go` |
@@ -27,7 +27,7 @@ See [openspec/project.md](../openspec/project.md) (**Performance Characteristics
 
 ## How to verify
 
-1. **Correctness:** `go test ./...` (and Python/ruff if rules or engine change).
+1. **Correctness:** `go test ./...` and `python3 -m unittest discover -s engines/iota -p 'test_*.py'` (engine index helpers).
 2. **Throughput:** Reproduce project’s CloudTrail-style load or internal benchmark; compare events/sec before/after.
 3. **Memory:** `runtime.MemStats` or `pprof` heap profiles on large S3 fixtures; watch RSS under sustained load.
 4. **Latency:** p99 for end-to-end processing and for SQLite-backed dedup if contention work lands.
@@ -40,6 +40,7 @@ Narrowing `--rules` to a single pack or symlinked subtree still reduces Python w
 ### Implemented (this repo)
 
 - **Persistent Python worker:** By default the Go engine starts `engines/iota/engine.py worker` once and reuses loaded rules across `Analyze` calls. Set **`IOTA_ENGINE_ONESHOT=1`** to force the legacy one-subprocess-per-batch behavior (for debugging or A/B).
+- **Rule indexing:** Pipelines that classify events pass **`log_types`** parallel to each batch; Python skips packs that do not apply to that classifier log type (`engines/iota/log_type_index.py`). Watch/s3-poll modes use inference when types are unknown.
 - **Streaming `Records` / top-level arrays:** The log processor streams those JSON shapes instead of always `ReadAll` first.
 - **Line scanner:** Up to **10 MiB** per line in line-delimited mode (avoids default 64 KiB `bufio.Scanner` limit).
 - **Data lake async flush (optional):** **`IOTA_DATALAKE_ASYNC_FLUSH=1`** moves S3/Glue upload off the synchronous `WriteEvent` path after a buffer is sealed; bounded queue (**`IOTA_DATALAKE_FLUSH_QUEUE_DEPTH`**, default 4). **`Flush()`** must run on shutdown so the worker drains (same as before). Prometheus: **`iota_datalake_async_flush_queue_depth`**.

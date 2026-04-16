@@ -8,7 +8,7 @@ owner: bilals12
 
 Cross-cutting throughput, memory, and contention targets for the detection pipeline. Requirements here are **roadmap** items (SHOULD/MAY): implementations land under tracked OpenSpec changes; until then, behavior in `openspec/specs/*` elsewhere remains authoritative.
 
-Tracked change: `openspec/changes/plan-performance-hot-paths/`.
+Tracked changes: `openspec/changes/plan-performance-hot-paths/`, `openspec/changes/add-rule-log-type-indexing/`.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ The system SHOULD avoid reloading the full Python rule set on every detection ba
 - **WHEN** evaluating events for a known log type
 - **THEN** implementations SHOULD reduce redundant work versus evaluating every rule file against every event (e.g. indexing, pre-filtering, or pack-scoped `--rules`), without changing rule semantics
 
-**Reference:** `internal/engine/engine.go`, `engines/iota/engine.py`
+**Reference:** `internal/engine/engine.go`, `engines/iota/engine.py`, `engines/iota/log_type_index.py` — Go sends optional `log_types` (classifier output); Python maps each rule’s pack (first directory under `--rules`) to canonical log types and skips non-applicable rules. Unknown packs and top-level `.py` rules remain unindexed (evaluated for every event).
 
 ### Requirement: Bounded memory for large S3 objects
 
@@ -102,7 +102,7 @@ When OpenTelemetry tracing is enabled, deployments SHOULD be able to reduce span
 
 ## Current implementation (baseline)
 
-- **Python worker:** `internal/engine/engine.go` runs `engines/iota/engine.py worker` with length-prefixed JSON frames; rules stay loaded until `Engine.Close()` or process error. `IOTA_ENGINE_ONESHOT=1` selects one subprocess per `Analyze`.
+- **Python worker:** `internal/engine/engine.go` runs `engines/iota/engine.py worker` with length-prefixed JSON frames; rules stay loaded until `Engine.Close()` or process error. `IOTA_ENGINE_ONESHOT=1` selects one subprocess per `Analyze`. Requests MAY include `log_types` (same length as `events`) for pack-based rule indexing (`engines/iota/log_type_index.py`).
 - **Streaming ingest:** `internal/logprocessor/processor.go` streams root JSON arrays and `{"Records":[...]}` when the file prefix matches (see code); other layouts use the prior buffered path.
 - **Line scanner:** Line mode allows up to 10 MiB tokens via `Scanner.Buffer`.
 - **Data lake:** Optional async flush via `IOTA_DATALAKE_ASYNC_FLUSH`; writer mutex protects the buffer; `Flush` drains async work.

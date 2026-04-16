@@ -309,10 +309,12 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 	processedEvents, errs := processor.Process(ctx, file)
 
 	var batch []*cloudtrail.Event
+	var logTypes []string
 	for event := range processedEvents {
 		log.Printf("parsed event: logType=%s eventTime=%s eventID=%s",
 			event.LogType, event.EventTime.Format(time.RFC3339), event.Event.EventID)
 		batch = append(batch, event.Event)
+		logTypes = append(logTypes, event.LogType)
 	}
 
 	if err := <-errs; err != nil {
@@ -328,7 +330,7 @@ func runOnce(ctx context.Context, jsonlFile, rulesDir, python, enginePy string, 
 
 	eng := engine.New(python, enginePy, rulesDir)
 	defer func() { _ = eng.Close() }()
-	matches, err := eng.Analyze(ctx, batch)
+	matches, err := eng.Analyze(ctx, batch, logTypes)
 	if err != nil {
 		return fmt.Errorf("analyze: %w", err)
 	}
@@ -357,13 +359,16 @@ func runAuditTail(ctx context.Context, auditLog, stateFile, rulesDir, python, en
 
 	var mu sync.Mutex
 	var batch []*cloudtrail.Event
+	var batchLogTypes []string
 	flush := func() error {
 		if len(batch) == 0 {
 			return nil
 		}
 		events := batch
+		lts := batchLogTypes
 		batch = nil
-		matches, err := eng.Analyze(ctx, events)
+		batchLogTypes = nil
+		matches, err := eng.Analyze(ctx, events, lts)
 		if err != nil {
 			return fmt.Errorf("analyze: %w", err)
 		}
@@ -417,6 +422,7 @@ func runAuditTail(ctx context.Context, auditLog, stateFile, rulesDir, python, en
 		for _, pe := range processed {
 			mu.Lock()
 			batch = append(batch, pe.Event)
+			batchLogTypes = append(batchLogTypes, pe.LogType)
 			n := len(batch)
 			shouldFlush := n >= 64
 			mu.Unlock()
@@ -462,7 +468,7 @@ func runWatch(ctx context.Context, eventsDir, rulesDir, python, enginePy, stateF
 			return nil
 		}
 
-		matches, err := eng.Analyze(ctx, batch)
+		matches, err := eng.Analyze(ctx, batch, nil)
 		if err != nil {
 			return fmt.Errorf("analyze: %w", err)
 		}
@@ -515,7 +521,7 @@ func runS3Poll(ctx context.Context, bucket, prefix, region string, interval time
 			return nil
 		}
 
-		matches, err := eng.Analyze(ctx, batch)
+		matches, err := eng.Analyze(ctx, batch, nil)
 		if err != nil {
 			return fmt.Errorf("analyze: %w", err)
 		}

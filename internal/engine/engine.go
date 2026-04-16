@@ -31,6 +31,8 @@ type Engine struct {
 type Request struct {
 	RulesDir string              `json:"rules_dir"`
 	Events   []*cloudtrail.Event `json:"events"`
+	// LogTypes, when set, must have the same length as Events (classifier output per event).
+	LogTypes []string `json:"log_types,omitempty"`
 }
 
 type Response struct {
@@ -173,7 +175,7 @@ func (e *Engine) analyzeOneshot(ctx context.Context, reqJSON []byte) ([]Match, e
 	return resp.Matches, nil
 }
 
-func (e *Engine) Analyze(ctx context.Context, events []*cloudtrail.Event) ([]Match, error) {
+func (e *Engine) Analyze(ctx context.Context, events []*cloudtrail.Event, logTypes []string) ([]Match, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -181,6 +183,9 @@ func (e *Engine) Analyze(ctx context.Context, events []*cloudtrail.Event) ([]Mat
 	req := Request{
 		RulesDir: e.rulesDir,
 		Events:   events,
+	}
+	if len(logTypes) == len(events) {
+		req.LogTypes = logTypes
 	}
 
 	reqJSON, err := json.Marshal(req)

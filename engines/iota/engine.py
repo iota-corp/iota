@@ -6,15 +6,23 @@ import sys
 import importlib.util
 from pathlib import Path
 from collections import defaultdict
-from typing import Dict, List, Any, Optional
+from typing import Any, DefaultDict, Dict, List, Optional
+
+from log_type_index import (
+    applicable_log_types_for_pack,
+    infer_log_type_from_event,
+    pack_for_rule_file,
+)
 
 MAX_FRAME = 512 * 1024 * 1024
 
 
 class Rule:
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, rules_dir: str):
         self.path = path
         self.rule_id = path.stem
+        self.pack = pack_for_rule_file(rules_dir, path)
+        self.applicable_log_types = applicable_log_types_for_pack(self.pack)
         self.module = self._load_module()
 
     def _load_module(self):
@@ -64,7 +72,11 @@ class Rule:
 
 class Engine:
     def __init__(self, rules_dir: str):
+        self.rules_dir = rules_dir
         self.rules = self._load_rules(rules_dir)
+        self._by_log_type: Dict[str, List[Rule]] = {}
+        self._unindexed: List[Rule] = []
+        self._build_indexes()
 
     def _load_rules(self, rules_dir: str) -> List[Rule]:
         rules = []
@@ -73,19 +85,50 @@ class Engine:
             if rule_file.name.startswith("_"):
                 continue
             try:
-                rules.append(Rule(rule_file))
+                rules.append(Rule(rule_file, rules_dir))
             except Exception:
                 continue
         return rules
 
-    def analyze(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_indexes(self) -> None:
+        by_lt: DefaultDict[str, List[Rule]] = defaultdict(list)
+        unindexed: List[Rule] = []
+        for rule in self.rules:
+            types = rule.applicable_log_types
+            if types is None:
+                unindexed.append(rule)
+                continue
+            for lt in types:
+                by_lt[lt].append(rule)
+        self._by_log_type = dict(by_lt)
+        self._unindexed = unindexed
+
+    def _candidate_rules(self, log_type: str) -> List[Rule]:
+        keyed = list(self._by_log_type.get(log_type, []))
+        out = keyed + list(self._unindexed)
+        if not out:
+            return list(self.rules)
+        return out
+
+    def analyze(
+        self,
+        events: List[Dict[str, Any]],
+        log_types: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
         matches = []
         counts: Dict[str, Dict[str, int]] = defaultdict(
             lambda: {"match": 0, "no_match": 0}
         )
-        for event in events:
+        for i, event in enumerate(events):
+            lt_hint: Optional[str] = None
+            if log_types is not None and i < len(log_types):
+                lt_hint = log_types[i] or None
+
             rule_event = self._unwrap_event(event)
-            for rule in self.rules:
+            effective_lt = lt_hint or infer_log_type_from_event(rule_event)
+            candidates = self._candidate_rules(effective_lt)
+
+            for rule in candidates:
                 if rule.matches(rule_event):
                     counts[rule.rule_id]["match"] += 1
                     matches.append(
@@ -186,12 +229,20 @@ def worker_main() -> None:
             break
         rules_dir = req.get("rules_dir")
         events = req.get("events", [])
+        log_types = req.get("log_types")
         if rules_dir is None:
             sys.stderr.write("engine worker: missing rules_dir\n")
             sys.exit(1)
         try:
             eng = state.get_engine(str(rules_dir))
-            response = eng.analyze(events)
+            lt = None
+            if isinstance(log_types, list) and len(log_types) == len(events):
+                lt = log_types
+            elif log_types is not None and isinstance(log_types, list):
+                sys.stderr.write(
+                    "engine worker: ignoring log_types (length != events); using inference\n"
+                )
+            response = eng.analyze(events, lt)
             write_frame(stdout, response)
             stdout.flush()
         except BrokenPipeError:
@@ -206,9 +257,13 @@ def main():
     request = json.load(sys.stdin)
     rules_dir = request.get("rules_dir")
     events = request.get("events", [])
+    log_types = request.get("log_types")
+    lt = None
+    if isinstance(log_types, list) and len(log_types) == len(events):
+        lt = log_types
 
     engine = Engine(rules_dir)
-    response = engine.analyze(events)
+    response = engine.analyze(events, lt)
     json.dump(response, sys.stdout)
 
 

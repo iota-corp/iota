@@ -6,6 +6,8 @@ This document is the **handbook for ongoing work** on iota: how to plan changes 
 
 ## 1. Repository map
 
+**Three-repo rule:** workload **manifests** and **GitOps** → **[iota-deployments](https://github.com/iota-corp/iota-deployments)**; **application** code and **image** → **iota** (here); **AWS** / **Terraform** → **[iota-infra](https://github.com/iota-corp/iota-infra)**. Same table in each repo’s **`README.md`**.
+
 | Area | Role |
 |------|------|
 | **`cmd/iota`** | CLI entrypoint: SQS mode, EventBridge mode, file/JSONL modes, health server, metrics. |

@@ -107,6 +107,16 @@ go build -o bin/iota ./cmd/iota
 | **[iota-deployments](https://github.com/iota-corp/iota-deployments)** | kustomize **base**, cluster overlays, **examples**, image tags, Argo CD                                 |
 | **[iota-infra](https://github.com/iota-corp/iota-infra)**             | **`eks-lab/`** homelab IAM; optional **`modules/`** for EKS + Helm (`iota-eks-helm`, `iota-system-iam`) |
 
+### where to change what (three-repo rule)
+
+| If you are changing…                                                                                                     | Work in repo                                                          |
+| ------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| **Application code**, rules, **`Dockerfile`**, CI, release image                                                         | **iota** (this repo)                                                  |
+| **Kustomize base**, per-cluster **overlays**, image pins, Argo app paths                                                 | **[iota-deployments](https://github.com/iota-corp/iota-deployments)** |
+| **AWS IAM** (homelab users/keys), **EKS**/VPC/queues, Terraform **modules** for EKS (`iota-eks-helm`, `iota-system-iam`) | **[iota-infra](https://github.com/iota-corp/iota-infra)**             |
+
+**Rule of thumb:** workload shape and GitOps → **iota-deployments**; behavior and image → **iota**; cloud accounts and IAM → **iota-infra**.
+
 ### deployment
 
 production manifests and per-cluster settings live in **iota-deployments** (kustomize **base**, overlays, secrets, queue URLs). **`deployments/kubernetes/README.md`** in this repo only points there—do not duplicate workload YAML here.
